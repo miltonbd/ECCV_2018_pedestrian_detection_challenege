@@ -4,13 +4,13 @@
 import os
 import cv2
 import numpy as np 
-
+from torchvision.transforms import *
 import sys
 import xml.etree.ElementTree as ET 
-
+from transforms import *
 import torch.utils.data
 
-
+pascal_data_root="/media/milton/ssd1/dataset/pascal/VOCdevkit"
 
 class VOC(object):
     N_CLASSES = 20
@@ -26,8 +26,6 @@ class VOC(object):
 
     label_to_id = dict(map(reversed, enumerate(CLASSES))) 
     id_to_label = dict(enumerate(CLASSES)) 
-
-
 
 
 class Viz(object):
@@ -85,8 +83,6 @@ class Viz(object):
         img = (1 - mask) * img + mask * blend
         return img.astype('uint8')
 
-
-
 class ParseAnnotation(object):
     def __init__(self, keep_difficult=True):
         self.keep_difficult = keep_difficult
@@ -117,8 +113,6 @@ class ParseAnnotation(object):
             labels.append(label)
 
         return np.array(bboxes), np.array(labels)
-
-
 
 #class VOCDetection(object):
 class VOCDetection(torch.utils.data.Dataset):
@@ -228,3 +222,37 @@ class VOCSegmentation(torch.utils.data.Dataset):
 
     def __len__(self):
         return len(self.ids)
+
+from torch.utils.data import DataLoader
+from numpy.random import RandomState
+
+
+if __name__ == '__main__':
+    PRNG = RandomState(1)
+    transform = Compose([
+        [ColorJitter(prob=0.5)],  # or write [ColorJitter(), None]
+        BoxesToCoords(),
+        Expand((1, 4), prob=0.5),
+        ObjectRandomCrop(),
+        HorizontalFlip(),
+        Resize(300),
+        CoordsToBoxes(),
+        [SubtractMean(mean=VOC.MEAN)],
+        [RGB2BGR()],
+        [ToTensor()],
+    ], PRNG, mode=None, fillval=VOC.MEAN)
+    target_transform = encoder.encode
+    dataset = VOCDetection(
+            root=pascal_data_root,
+            image_set=[('2007', 'trainval'), ('2012', 'trainval'),],
+            keep_difficult=True,
+            transform=Compose([ToTensor()]),
+            target_transform=Compose([Resize(224,224), ToTensor]));
+
+    dataloader = DataLoader(dataset=dataset, batch_size=10, shuffle=True,
+            num_workers=4, pin_memory=True)
+    for idx,bacth_data in enumerate(dataloader):
+        print(idx)
+
+
+
