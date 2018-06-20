@@ -9,7 +9,6 @@ Images 	11500 	5000 	3500
 Labels 	46513 	19696 	
 """
 
-
 def read_train_gt():
     annotations={}
     with open(train_bbx_gt_file,'r') as train_bbx_file:

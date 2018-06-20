@@ -1,311 +1,101 @@
-'''
-Simple transfer learning.
-Teacher model: Image descriptors from black-box model
-Student model: VGG|ResNet|DenseNet
-'''
-
-from __future__ import print_function
 import os
-import argparse
-import random
-import sys
-sys.path.append('/media/milton/ssd1/research/ai-artist')
-from utils.functions import progress_bar
+from torch import nn,optim
+import torchvision
+from classifier import Classifier
+from models.vgg import vgg19_bn
+from augment_data import augment_images
+import  os
+import time
+import torchvision.models as models
+import torch
 
+from torch.nn import functional
+import torch.nn.functional as F
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = "1"
-from tensorboardX import SummaryWriter
-import numpy as np
-import torch
-import torch.nn as nn
-import torch.optim as optim
-import torch.nn.functional as F
-import torch.backends.cudnn as cudnn
-import torchvision.transforms as transformsd
-from torch.autograd import Variable
-from PIL import Image
-import PIL
+"""
 
-from models import *
-from dataset import ImageListDataset
-# from utils import progress_bar
+sudo nvidia-smi -i 0 -pl 180
+"""
 
-from torchsummary import summary
-
-MEAN = [0.485, 0.456, 0.406]
-STD = [0.229, 0.224, 0.225] 
-
-#torch.set_default_tensor_type('torch.FloatTensor')
-from arguments import *
-args = parser.parse_args()
-
-
-def adjust_learning_rate(optimizer, epoch, args):
-    """Sets the learning rate to the initial LR decayed by 10 every n epochs"""
-    
-    lr = args.lr * (0.1 ** (epoch//args.down_epoch))
-
-    for param_group in optimizer.param_groups:
-        param_group['lr'] = lr
-
-
-def train(epoch):
-    '''
-    Train function for each epoch
-    '''
-
-    global net
-    global trainloader
-    global args
-    global log_file
-    global optimizer
-    global criterion
-
-    print('\nEpoch: %d' % epoch)
-    net.train()
-    train_loss = 0
-    total = 0
-    total_count=len(trainloader)
-    for batch_idx, (inputs, targets) in enumerate(trainloader):
-        inputs, targets = inputs, targets.squeeze()
-        adjust_learning_rate(optimizer, epoch, args)
-        if args.cuda:
-            inputs, targets = inputs.cuda(async=True), targets.cuda(async=True)
-
-        optimizer.zero_grad()
-        inputs = Variable(inputs, requires_grad=True)
-        targets = Variable(targets, requires_grad=False)
-        outputs = net(inputs)
-
-        loss = criterion(outputs, targets)
-        loss.backward()
-        optimizer.step()
-
-        curr_batch_loss = loss.data[0]
-        train_loss += curr_batch_loss
-        total += targets.size(0)
-        step_loss=train_loss / (batch_idx + 1)
-        log_file.add_scalar('Train Step Loss',step_loss, epoch*total_count+batch_idx)
-        progress_bar(batch_idx,
-                      total_count,
-                      'Train Loss step: {l:.3f}'.format(l=step_loss))
-
-    log_file.add_scalar('train loss',train_loss,epoch)
-
-
-def validation(epoch):
-    
-    global net
-    global valloader
-    global best_loss
-    global args
-    global log_file
-
-    net.eval()
-    val_loss = 0
-    correct = 0
-    total = 0
-    for batch_idx, (inputs, targets) in enumerate(valloader):
-        inputs, targets = inputs, targets.squeeze()
-        if args.cuda:
-            inputs, targets = inputs.cuda(async=True), targets.cuda(async=True)
-        inputs, targets = Variable(inputs, volatile=True), Variable(targets)
-        
-        outputs = net(inputs)
-        loss = criterion(outputs, targets)
-
-        curr_batch_loss = loss.data[0]
-        val_loss += curr_batch_loss
-        progress_bar(batch_idx, 
-                     len(valloader), 
-                     'Validation Loss Step: {l:.3f}'.format(l = val_loss/(batch_idx+1)))
-    log_file.add_scalar('Validation Loss',val_loss, epoch)
-    val_loss = val_loss/(batch_idx+1)
-    if val_loss < best_loss:
-        print('Saving..')
-        state = {
-            'net': net.state_dict() if torch.cuda.device_count() <= 1 \
-                                    else net.module.state_dict(),
-            'loss': val_loss,
-            'epoch': epoch,
-            'arguments': args
-        }
-        session_checkpoint = 'checkpoint/{name}/'.format(name=args.name)
-        if not os.path.isdir(session_checkpoint):
-            os.makedirs(session_checkpoint)
-        torch.save(state, session_checkpoint + 'best_model_chkpt.t7')
-        best_loss = val_loss
-
-def main():
-    global net
-    global trainloader
-    global valloader
-    global best_loss
-    global log_file
-    global optimizer
-    global criterion
-    #initialize
-    start_epoch = 0
-    best_loss = np.finfo(np.float32).max
-
-    #augmentation
-    random_rotate_func = lambda x: x.rotate(random.randint(-15,15),
-                                            resample=Image.BICUBIC)
-    random_scale_func = lambda x: transforms.Scale(int(random.uniform(1.0,1.4)\
-                                                   * max(x.size)))(x)
-    gaus_blur_func = lambda x: x.filter(PIL.ImageFilter.GaussianBlur(radius=1))
-    median_blur_func = lambda x: x.filter(PIL.ImageFilter.MedianFilter(size=3))
-
-    #train preprocessing
-    transform_train = transforms.Compose([
-        transforms.Lambda(lambd=random_rotate_func),
-        transforms.CenterCrop(224),
-        transforms.Scale((112,112)),
-        transforms.RandomHorizontalFlip(),
-        transforms.ToTensor(),  
-        transforms.Normalize(mean=MEAN, std=STD),
-    ])
-
-    #validation preprocessing
-    transform_val = transforms.Compose([
-        transforms.CenterCrop(224),
-        transforms.Scale((112,112)),
-        transforms.RandomHorizontalFlip(),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=MEAN, std=STD)
-    ])
+def load_data(self):
 
     print('==> Preparing data..')
-    trainset = ImageListDataset(root=args.root, 
-                                list_path=args.datalist, 
-                                split='train', 
-                                transform=transform_train)
+    self.trainloader, self.testloader = get_data_sets(self.model_details.batch_size_train,self.model_details.batch_size_test )
+    train_count = len(self.trainloader) * self.model_details.batch_size_train
+    test_count = len(self.testloader) * self.model_details.batch_size_test
+    print('==> Total examples, train: {}, test:{}'.format(train_count, test_count))
 
-    trainloader = torch.utils.data.DataLoader(trainset, 
-                                              batch_size=args.batch_size, 
-                                              shuffle=True, 
-                                              num_workers=8, 
-                                              pin_memory=True)
+def get_vgg_model():
+    model_conv = vgg19_bn(pretrained=True)
 
-    valset = ImageListDataset(root=args.root, 
-                               list_path=args.datalist, 
-                               split='val', 
-                               transform=transform_val)
+    # Number of filters in the bottleneck layer
+    num_ftrs = model_conv.classifier[6].in_features
 
-    valloader = torch.utils.data.DataLoader(valset, 
-                                             batch_size=args.batch_size, 
-                                             shuffle=False, 
-                                             num_workers=8, 
-                                             pin_memory=True)
+    # convert all the layers to list and remove the last one
+    features = list(model_conv.classifier.children())[:-1]
 
-    # Create model
-    net = None
-    if args.model_name == 'ResNet18':
-        print('Loading ResNet18')
-        net = ResNet18()
-    elif args.model_name == 'ResNet34':
-        print('Loading ResNet34')
-        net = ResNet34()
-    elif args.model_name == 'ResNet50':
-        # print('Loading pnasnet5large')
-        # from student_net_learning.pretrainedmodels.models.pnasnet import pnasnet5large
-        # net = pnasnet5large()
-        # net = dpn131(pretrained=True)
-        print("ResNET152")
-        from classification.models.pytorch.resnet import resnet152
-        net=resnet152(pretrained=True)
-    elif args.model_name == 'DenseNet':
-        print('Loading DenseNet121')
-        net = DenseNet121()
-    elif args.model_name == 'VGG11':
-        print('Loading VGG11')
-        net = VGG('VGG11')
-    elif args.model_name == 'VGG19_BN':
-        from student_net_learning.pretrainedmodels.models.pnasnet import pnasnet5large
-        print('Loading VGG19_BN')
-        net = pnasnet5large()
+    ## Add the last layer based on the num of classes in our dataset
+    features.extend([nn.Linear(num_ftrs, 3)])
 
-    print('==> Building model..')
+    ## convert it into container and add it to our model class.
+    model_conv.classifier = nn.Sequential(*features)
+    return model_conv
 
-    if args.resume:
-        # Load checkpoint
-        print('==> Resuming from checkpoint..')
-        assert os.path.isdir('checkpoint'), 'Error: no checkpoint directory found!'
-        checkpoint = torch.load('./checkpoint/{0}/best_model_ckpt.t7'.format(args.name))
-        net.load_state_dict(checkpoint['net'])
-        best_loss = checkpoint['loss']
-        start_epoch = checkpoint['epoch'] + 1
+class ModelDetails(object):
 
-    # Choosing of criterion
-    if args.criterion == 'MSE':
-        criterion = nn.MSELoss()
-    else:
-        criterion = None # Add your criterion
+    def __init__(self):
+        model = get_vgg_model()
+        # children=list(model.classifier.children())[-1]
+        # classes=torch.nn.Sequential(children)
+        # model.classifier = torch.nn.Sequential(classes, torch.nn.Linear(4096, 3))
 
+        # model.avg_pool = nn.AvgPool2d(2, count_include_pad=False)
+        # model.last_linear = nn.Linear(1536, 3)
 
-    # Load on GPU
-    if args.cuda:
-        print ('==> Using CUDA')
-        print (torch.cuda.device_count())
-        if torch.cuda.device_count() > 1:
-            net = torch.nn.DataParallel(net).cuda()
-        else:
-            net = net.cuda()
-        cudnn.benchmark = True
-        print ('==> model on GPU')
-        criterion = criterion.cuda()
-    else:
-        print ('==> model on CPU')
-    
-    if not os.path.isdir(args.log_dir_path):
-       os.makedirs(args.log_dir_path)
-    log_file_path = os.path.join(args.log_dir_path, args.name )
-    # logger file openning
-    log_file = SummaryWriter(log_file_path)
+        # todo use ssd and yolo to detct both face and class
+        # todo freeze few layers in first
+        # todo augement data set and use random crop, pair augment
+        # todo mix the emotional images like image pair
+        # todo debug the detected face patch.
+        # todo add random
+        # todo new loss function
+        # todo new optimization
+        # todo new training proceudres
+        # todo augment image after every epoch.
+        ## Freezing the first few layers. Here I am freezing the first 7 layers
 
-    total=0
+        # num_layers_freeze=5
+        # for name, child in model.named_children():
+        #     if name=='features':
+        #         for name, chile in child.named_children():
+        #             if int(name)<num_layers_freeze:
+        #                 for params in chile.parameters():
+        #                     params.requires_grad = False
 
-    for name, child in net.named_children():
-        total+=1
-    print("Total Layer:{}".format(total))
+        self.model= model
+        self.learning_rate = 0.01
+        self.epsilon=1e-8
+        self.optimizer = "adam"
+        self.model_name_str = "inceptionv4"
+        self.batch_size_train=50
+        self.batch_size_test=50
+        self.epochs = 200
+        self.logs_dir  = "logs/inceptionv4/no_aug"
+        self.augmentor = augment_images
 
-    ct = total
+model_details=ModelDetails()
+model_details.model_name= "inceptionv4"
 
-    for name2, params in child.named_parameters():
-        if ct < 1:
-            params.requires_grad = True
-        else:
-            params.requires_grad=False
-        ct-=1
-
-    print('==> Model')
-    summary(net, (3, 112, 112))
-
-    # Choosing of optimizer
-    if args.optimizer == 'adam':
-        optimizer = optim.Adam(filter(lambda p: p.requires_grad, net.parameters()), lr=args.lr,eps=1)
-    elif args.optimizer == 'adadelta':
-        optimizer = optim.Adadelta(net.parameters(), lr=args.lr)
-    else:
-        optimizer = optim.SGD(net.parameters(), lr=args.lr, momentum=0.9, weight_decay=5e-4)
-
-
+clasifier=Classifier(model_details)
+clasifier.load_data()
+clasifier.load_model()
+for epoch in range(clasifier.start_epoch, clasifier.start_epoch + model_details.epochs):
     try:
-        for epoch in range(start_epoch, args.epochs):
-            train(epoch)
-            validation(epoch)
-        print ('==> Best loss: {0:.5f}'.format(best_loss))
-    except Exception as e:
-        print (e.message)
-    finally:
-        pass
-if __name__ == '__main__':
-    net = None
-    trainloader = None
-    valloader = None
-    best_loss = None
-    log_file = None
-    optimizer = None
-    criterion = None
-
-    main()
+      clasifier.train(epoch)
+      time.sleep(2)
+      clasifier.test(epoch)
+    except KeyboardInterrupt:
+      clasifier.test(epoch)
+      break;
+    clasifier.load_data()
