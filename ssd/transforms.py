@@ -95,7 +95,7 @@ def _to_coords(boxes):
     cds = []
     for box in boxes:
         xmin, ymin, xmax, ymax = box 
-        cds += [
+        cds = cds + [
             [xmin, ymin],
             [xmax, ymin],
             [xmax, ymax],
@@ -519,7 +519,7 @@ class RandomErasing(object):
                 cut = lambda im: self._fill(im, (x1, y1, x1+tw, y1+th), 0)
                 img = HalfBlood(img, self.anchor, erase, cut)
 
-                count += 1
+                count = count + 1
             if count >= num:
                 return img
 

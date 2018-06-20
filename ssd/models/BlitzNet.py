@@ -135,7 +135,7 @@ class BottleneckSkip(nn.Module):
         self.residual = nn.Sequential(
             nn.Conv2d(in_channels1 + in_channels2, out_channels // 4, 1, bias=False)
             nn.BatchNorm2d(out_channels // 4)
-            nn.ReLU(inplace=True)
+            nn.ReLU()
             nn.Conv2d(out_channels // 4, out_channels // 4, 3, padding=1, stride=stride, bias=False)
             nn.BatchNorm2d(out_channels // 4)
             nn.ReLU(inplace=True)

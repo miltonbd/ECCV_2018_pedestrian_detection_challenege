@@ -12,17 +12,16 @@ import torch.backends.cudnn as cudnn
 from torch.autograd import Variable
 from torch.utils.data import DataLoader
 
-from pascal_voc import VOCDetection, VOC, Viz
-from transforms import *
-from evaluation import eval_voc_detection
+from ssd.pascal_voc import VOCDetection, VOC, Viz
+from ssd.transforms import *
+from ssd.evaluation import eval_voc_detection
 
 import sys
 sys.path.append('./models')
-from SSD import SSD300
+from ssd.models.SSD import SSD300
 
-from loss import MultiBoxLoss
-from multibox import MultiBox
-
+from ssd.loss import MultiBoxLoss
+from ssd.multibox import MultiBox
 
 from tensorboardX import SummaryWriter
 summary = SummaryWriter()
@@ -30,11 +29,11 @@ summary = SummaryWriter()
 # Setup
 parser = argparse.ArgumentParser(description='PyTorch SSD variants implementation')
 parser.add_argument('--checkpoint', help='resume from checkpoint', default='')
-parser.add_argument('--voc_root', help='PASCAL VOC dataset root path', default='')
-parser.add_argument('--batch_size', type=int, help='input data batch size', default=32)
+parser.add_argument('--voc_root', help='PASCAL VOC dataset root path', default='/media/milton/ssd1/dataset/pascal/VOCdevkit')
+parser.add_argument('--batch_size', type=int, help='input data batch size', default=4)
 parser.add_argument('--lr', '--learning_rate', type=float, help='initial learning rate', default=1e-3)
 parser.add_argument('--start_iter', type=int, help='start iteration', default=0)
-parser.add_argument('--backbone', help='pretrained backbone net weights file', default='vgg16_reducedfc.pth')
+parser.add_argument('--backbone', help='pretrained backbone net weights file', default='/media/milton/ssd1/research/competitions/data_wider_pedestrian/vgg16_reducedfc.pth')
 parser.add_argument('--cuda', action='store_true', help='enable cuda')
 parser.add_argument('--test', action='store_true', help='test mode')
 parser.add_argument('--demo', action='store_true', help='show detection result')
@@ -162,7 +161,7 @@ def train():
                         os.mkdir('weights')
                 torch.save(model.state_dict(), 'weights/{}_0712_{}.pth'.format(cfg.get('name', 'SSD'), iteration))
             
-            iteration += 1
+            iteration =iteration + 1
             if iteration > max_iter:
                 return 0
 

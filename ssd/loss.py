@@ -83,7 +83,7 @@ class FocalLoss(nn.Module):
 
         conf_loss = self.alpha * pos_conf_loss + (1 - self.alpha) * neg_conf_loss
 
-        self.count += 1
+        self.count = self.count + 1
         if self.count % 1000 == 0:
             print('pos loss, neg loss', pos_conf_loss.data, neg_conf_loss.data)
             print('multiloss', self.multiloss(xloc, xconf, loc, label, 3))

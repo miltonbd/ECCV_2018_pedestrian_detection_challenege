@@ -78,7 +78,7 @@ class SSD300(nn.Module):
         for name, m in itertools.chain(self.Base._modules.items(), 
                                        self.Extra._modules.items()):
             if isinstance(m, nn.Conv2d):
-                x = F.relu(m(x), inplace=True)
+                x = F.relu(m(x))
             else:
                 x = m(x)
 
@@ -117,8 +117,6 @@ class SSD300(nn.Module):
             print('Backbone loaded!')
         else:
             print('No backbone file!')
-
-
 
 
 class SSD512(SSD300):
