@@ -1,32 +1,31 @@
-
-import detector
-from torchsummary import summary
-from torch import nn
-from pretrainedmodels.models.inceptionv4 import  inceptionv4
-from models.vgg import vgg19_bn
-import time
-from torchvision import transforms
-# from data_reader_cifar import *
+import  os
+gpu=1
+os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu)
 from detector import Detector
-from data_reader_emotiw import *
 from torch import optim
-from focal_loss import FocalLoss
 from augment_data import augment_images
-from data_reader import *
-from pretrainedmodels.models.pnasnet import pnasnet5large
 from model_loader import *
+from loss_loader import *
+
 """
 sudo nvidia-smi -pl 180
+
+use command line to run the training.
+
+todo download more images using image_utils and isic-arhive. Also, use more online resources for data. 
+
 """
-gamma = 2
 
-def get_loss_function():
-    print("==> Using Focal Loss.....")
-    return FocalLoss(gamma)
+from ssd.layers.modules.multibox_loss import MultiBoxLoss
 
+from statics import *
+def get_loss_function(classifier):
+    return  MultiBoxLoss(voc['num_classes'], 0.5, True, 0, True, 3, 0.5,
+                             False, True)
 
 def get_model(gpu):
-    return get_inceptionv4_model(gpu)
+    return get_ssd_model(gpu, .8)
 
 def get_optimizer(model_trainer):
     epsilon=1e-8
@@ -37,18 +36,18 @@ def get_optimizer(model_trainer):
     # optimizer=optim.SGD(filter(lambda p: p.requires_grad, model_trainer.model.parameters()),
     #                      lr=0.001,momentum=momentum,weight_decay=weight_decay)
     optimizer = optim.Adam(filter(lambda p: p.requires_grad, model_trainer.model.parameters()),
-                            lr=0.001)
+                            lr=0.01)
     return optimizer
 
 class ModelDetails(object):
     def __init__(self,gpu):
         self.model,self.model_name_str = get_model(gpu)
-        self.batch_size=10
+        self.batch_size=20
         self.epochs = 200
         self.logs_dir  = "logs/{}/{}".format(gpu,self.model_name_str)
         self.augment_images = augment_images
         self.dataset_loader=get_data_loader(self.batch_size)
-        self.criterion = get_loss_function()
+        self.get_loss_function = get_loss_function
         self.get_optimizer = get_optimizer
         self.dataset=data_set_name
 
@@ -65,3 +64,5 @@ def start_training(gpu):
           clasifier.test(epoch)
           break;
         clasifier.load_data()
+
+start_training(gpu)

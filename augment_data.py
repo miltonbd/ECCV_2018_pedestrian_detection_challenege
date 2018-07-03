@@ -3,7 +3,7 @@ from PIL import Image
 from imgaug import augmenters as iaa
 import numpy as np
 import imageio
-from utils import *
+from utils.utils import *
 import threading
 
 """
