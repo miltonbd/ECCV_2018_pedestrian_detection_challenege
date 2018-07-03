@@ -10,4 +10,4 @@ def get_ssd_model(gpu, percentage_freeze):
     model = build_ssd('train', voc['min_dim'], voc['num_classes'])
 
     # summary(model.cuda(), (3, height, width))
-    return model,"pnas_large_{}_adam".format(gpu)
+    return model,"ssd_{}_adam".format(gpu)

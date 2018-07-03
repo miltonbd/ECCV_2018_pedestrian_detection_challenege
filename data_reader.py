@@ -137,6 +137,7 @@ class DatasetReader(Dataset):
 from data_reader_pascal_voc import get_data_loader as data_loader_pascal
 from ssd.augmentations import *
 from statics import *
+from ssd import *
 def get_data_loader(batch_size):
     # train_data_set = DatasetReader(get_train_data(),"train")
     # validation_data_set = DatasetReader(get_validation_data(),"valid")
@@ -144,9 +145,10 @@ def get_data_loader(batch_size):
     #                                           num_workers=2)
     # valloader = torch.utils.data.DataLoader(validation_data_set, batch_size=batch_size, shuffle=False,
     #                                           num_workers=2)
-    augmentation=SSDAugmentation(voc['min_dim'],
+    train_transform=SSDAugmentation(voc['min_dim'],
                     MEANS)
-    trainloader, valloader = data_loader_pascal(8,augmentation )
+    test_transform=BaseTransform(300, MEANS)
+    trainloader, valloader = data_loader_pascal(batch_size,train_transform,test_transform )
     return (trainloader, valloader)
 
 def test():

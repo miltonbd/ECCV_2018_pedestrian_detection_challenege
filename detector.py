@@ -96,7 +96,7 @@ class Detector(object):
 
     # Training
     def train(self, epoch):
-        print('\nEpoch: %d' % epoch)
+        print('\n==> Training started with Epoch : %d' % epoch)
         model=self.model
         model.train()
         train_loss = 0
@@ -107,42 +107,42 @@ class Detector(object):
         step_index = 0
         loc_loss = 0
         conf_loss = 0
+        print("\n==>Total train iteration per epoch:{}".format(len(trainloader)))
         for batch_idx, (inputs, targets) in enumerate(trainloader):
-            for batch_idx, (inputs, targets) in enumerate(trainloader):
-                iteration = epoch * len(trainloader) + batch_idx
-                if iteration in voc['lr_steps']:
-                    step_index += 1
-                    self.adjust_learning_rate(optimizer, args.gamma, step_index)
-                    inputs = Variable(inputs.cuda())
-                    targets = [Variable(ann.cuda(), volatile=True) for ann in targets]
-                else:
-                    inputs = Variable(inputs)
-                    targets = [Variable(ann, volatile=True) for ann in targets]
+            iteration = epoch * len(trainloader) + batch_idx
+            if iteration in voc['lr_steps']:
+                step_index += 1
+                self.adjust_learning_rate(optimizer, args.gamma, step_index)
+                # inputs = Variable(inputs.cuda())
+                # targets = [Variable(ann.cuda(), volatile=True) for ann in targets]
+            # else:
+            inputs = Variable(inputs)
+            targets = [Variable(ann, volatile=True) for ann in targets]
 
-                # forward
-                t0 = time.time()
-                inputs=inputs.cuda()
-                out = model(inputs)
-                # backprop
-                optimizer.zero_grad()
-                loss_l, loss_c = self.criterion(out, targets)
-                loss = loss_l + loss_c
-                loss.backward()
-                optimizer.step()
-                t1 = time.time()
-                loc_loss += loss_l.data[0]
-                conf_loss += loss_c.data[0]
+            # forward
+            t0 = time.time()
+            inputs=inputs.cuda()
+            out = model(inputs)
+            # backprop
+            optimizer.zero_grad()
+            loss_l, loss_c = self.criterion(out, targets)
+            loss = loss_l + loss_c
+            loss.backward()
+            optimizer.step()
+            t1 = time.time()
+            loc_loss += loss_l.data[0]
+            conf_loss += loss_c.data[0]
 
-                if iteration % 10 == 0:
-                    print('timer: %.4f sec.' % (t1 - t0))
-                    print('iter ' + repr(iteration) + ' || Loss: %.4f ||' % (loss.data[0]), end=' ')
-                    # progress_bar(batch_idx, len(self.trainloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
-                    #              % (batch_loss, 100. * correct / total, correct, total))
+            if iteration % 10 == 0:
+                print('timer: %.4f sec.' % (t1 - t0))
+                print('iter ' + repr(iteration) + ' || Loss: %.4f ||' % (loss.data[0]), end=' ')
+                # progress_bar(batch_idx, len(self.trainloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
+                #              % (batch_loss, 100. * correct / total, correct, total))
 
-                # if iteration != 0 and iteration % 1000 == 0:
-                #     print('Saving state, iter:', iteration)
-                #     torch.save(ssd_net.state_dict(), 'weights/ssd300_COCO_' +
-                #                repr(iteration) + '.pth')
+            # if iteration != 0 and iteration % 1000 == 0:
+            #     print('Saving state, iter:', iteration)
+            #     torch.save(ssd_net.state_dict(), 'weights/ssd300_COCO_' +
+            #                repr(iteration) + '.pth')
 
 
             # step = epoch * len(self.trainloader) + batch_idx
@@ -179,7 +179,9 @@ class Detector(object):
             os.mkdir('checkpoint')
         torch.save(state, './checkpoint/{}_ckpt.t7'.format(self.model_name_str ))
 
+
     def test(self,epoch):
+        print('\n==> Test started ')
         model=self.model
         model.eval()
         test_loss = 0
@@ -187,24 +189,77 @@ class Detector(object):
         total = 0
         target_all = []
         predicted_all = []
+        testloader = self.testloader
+        optimizer = self.optimizer
+        loc_loss = 0
+        conf_loss = 0
+        # all detections are collected into:
+        #    all_boxes[cls][image] = N x 5 array of detections in
+        #    (x1, y1, x2, y2, score)
+        num_images=len(testloader.dataset)
+        all_boxes = [[[] for _ in range(num_images)]
+                     for _ in range(len(self.model_details.class_names) + 1)]
+        _t = {'im_detect': Timer(), 'misc': Timer()}
         with torch.no_grad():
-            for batch_idx, (inputs, targets) in enumerate(self.testloader):
-                inputs, targets = inputs.to(device), targets.to(device)
+            for batch_idx, (inputs, targets) in enumerate(testloader):
+                iteration = epoch * len(testloader) + batch_idx
+                inputs = Variable(inputs)
+                targets = [Variable(ann, volatile=True) for ann in targets]
+                # forward
+                t0 = time.time()
+                inputs = inputs.cuda()
                 outputs = model(inputs)
-                loss = self.criterion(outputs, targets)
+                for i, out_image in enumerate(outputs):
+                    detections = out_image.data
+                    detect_time = _t['im_detect'].toc(average=False)
+                    # skip j = 0, because it's the background class
+                    for j in range(1, detections.size(1)):
+                        dets = detections[0, j, :]
+                        mask = dets[:, 0].gt(0.).expand(5, dets.size(0)).t()
+                        dets = torch.masked_select(dets, mask).view(-1, 5)
+                        if dets.dim() == 0:
+                            continue
+                        boxes = dets[:, 1:]
+                        boxes[:, 0] *= w
+                        boxes[:, 2] *= w
+                        boxes[:, 1] *= h
+                        boxes[:, 3] *= h
+                        scores = dets[:, 0].cpu().numpy()
+                        cls_dets = np.hstack((boxes.cpu().numpy(),
+                                              scores[:, np.newaxis])).astype(np.float32,
+                                                                             copy=False)
+                        all_boxes[j][i] = cls_dets
 
-                test_loss += loss.item()
-                _, predicted = outputs.max(1)
-                predicted_reshaped = predicted.cpu().numpy().reshape(-1)
-                predicted_all = np.concatenate((predicted_all, predicted_reshaped), axis=0)
+                    print('im_detect: {:d}/{:d} {:.3f}s'.format(i + 1,
+                                                                num_images, detect_time))
 
-                targets_reshaped = targets.data.cpu().numpy().reshape(-1)
-                target_all = np.concatenate((target_all, targets_reshaped), axis=0)
-                total += targets.size(0)
-                correct += predicted.eq(targets).sum().item()
+                # backprop
+                optimizer.zero_grad()
+                loss_l, loss_c = self.criterion(outputs, targets)
+                loss = loss_l + loss_c
+                t1 = time.time()
+                loc_loss += loss_l.data[0]
+                conf_loss += loss_c.data[0]
 
-                progress_bar(batch_idx, len(self.testloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
-                             % (test_loss / (batch_idx + 1), 100. * correct / total, correct, total))
+                if iteration % 10 == 0:
+                    print('timer: %.4f sec.' % (t1 - t0))
+                    print('iter ' + repr(iteration) + ' || Loss: %.4f ||' % (loss.data[0]), end=' ')
+                # inputs, targets = inputs.to(device), targets.to(device)
+                # outputs = model(inputs)
+                # loss = self.criterion(outputs, targets)
+                #
+                # test_loss += loss.item()
+                # _, predicted = outputs.max(1)
+                # predicted_reshaped = predicted.cpu().numpy().reshape(-1)
+                # predicted_all = np.concatenate((predicted_all, predicted_reshaped), axis=0)
+                #
+                # targets_reshaped = targets.data.cpu().numpy().reshape(-1)
+                # target_all = np.concatenate((target_all, targets_reshaped), axis=0)
+                # total += targets.size(0)
+                # correct += predicted.eq(targets).sum().item()
+                #
+                # progress_bar(batch_idx, len(self.testloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
+                #              % (test_loss / (batch_idx + 1), 100. * correct / total, correct, total))
 
         # Save checkpoint.
         acc = 100. * correct / total
@@ -219,4 +274,28 @@ class Detector(object):
         cm = metrics.confusion_matrix(target_all, predicted_all)
         print("\nConfsusion metrics: \n{}".format(cm))
 
+class Timer(object):
+    """A simple timer."""
+
+    def __init__(self):
+        self.total_time = 0.
+        self.calls = 0
+        self.start_time = 0.
+        self.diff = 0.
+        self.average_time = 0.
+
+    def tic(self):
+        # using time.time instead of time.clock because time time.clock
+        # does not normalize for multithreading
+        self.start_time = time.time()
+
+    def toc(self, average=True):
+        self.diff = time.time() - self.start_time
+        self.total_time += self.diff
+        self.calls += 1
+        self.average_time = self.total_time / self.calls
+        if average:
+            return self.average_time
+        else:
+            return self.diff
 
