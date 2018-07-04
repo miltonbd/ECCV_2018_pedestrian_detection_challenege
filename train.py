@@ -52,7 +52,6 @@ parser.add_argument('--save_folder', default='/media/milton/ssd1/research/compet
                     help='Directory for saving checkpoint models')
 args = parser.parse_args()
 
-
 if torch.cuda.is_available():
     if args.cuda:
         torch.set_default_tensor_type('torch.cuda.FloatTensor')

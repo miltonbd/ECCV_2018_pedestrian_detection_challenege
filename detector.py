@@ -116,15 +116,16 @@ class Detector(object):
                 # inputs = Variable(inputs.cuda())
                 # targets = [Variable(ann.cuda(), volatile=True) for ann in targets]
             # else:
-            inputs = Variable(inputs)
-            targets = [Variable(ann, volatile=True) for ann in targets]
+            inputs = Variable(inputs.cuda())
+            targets = [Variable(ann.cuda(), volatile=True).cuda() for ann in targets]
 
             # forward
             t0 = time.time()
-            inputs=inputs.cuda()
+            inputs=inputs
             out = model(inputs)
             # backprop
             optimizer.zero_grad()
+            out=[o.cuda() for o in out]
             loss_l, loss_c = self.criterion(out, targets)
             loss = loss_l + loss_c
             loss.backward()
@@ -135,7 +136,7 @@ class Detector(object):
 
             if iteration % 10 == 0:
                 print('timer: %.4f sec.' % (t1 - t0))
-                print('iter ' + repr(iteration) + ' || Loss: %.4f ||' % (loss.data[0]), end=' ')
+                print('epoch:{} '+str(epoch)+', Iteration:{} ' + repr(iteration) + ' || Loss: %.4f ||' % (loss.data[0]), end=' ')
                 # progress_bar(batch_idx, len(self.trainloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
                 #              % (batch_loss, 100. * correct / total, correct, total))
 
@@ -190,7 +191,6 @@ class Detector(object):
         target_all = []
         predicted_all = []
         testloader = self.testloader
-        optimizer = self.optimizer
         loc_loss = 0
         conf_loss = 0
         # all detections are collected into:
@@ -217,7 +217,7 @@ class Detector(object):
                         dets = detections[0, j, :]
                         mask = dets[:, 0].gt(0.).expand(5, dets.size(0)).t()
                         dets = torch.masked_select(dets, mask).view(-1, 5)
-                        if dets.dim() == 0:
+                        if dets.dim() == 0 or dets:
                             continue
                         boxes = dets[:, 1:]
                         boxes[:, 0] *= w

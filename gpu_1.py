@@ -1,5 +1,5 @@
 import  os
-gpu=0
+gpu=1
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu)
 from detector import Detector
@@ -37,10 +37,9 @@ def get_optimizer(model_trainer):
     # model_trainer.writer.add_scalar("epsilon", epsilon)
     # optimizer=optim.SGD(filter(lambda p: p.requires_grad, model_trainer.model.parameters()),
     #                      lr=0.001,momentum=momentum,weight_decay=weight_decay)
-    # optimizer = optim.Adam(filter(lambda p: p.requires_grad, model_trainer.model.parameters()),
-    #                         lr=0.01)
-    optimizer = optim.SGD(filter(lambda p: p.requires_grad, model_trainer.model.parameters()), lr=0.001, momentum=0.9,
-                          weight_decay=weight_decay)
+    optimizer = optim.Adam(filter(lambda p: p.requires_grad, model_trainer.model.parameters()),lr=0.01)
+    # optimizer = optim.SGD(filter(lambda p: p.requires_grad, model_trainer.model.parameters()), lr=0.001, momentum=0.9,
+    #                       weight_decay=weight_decay)
     return optimizer
 
 class ModelDetails(object):
@@ -64,7 +63,7 @@ def start_training(gpu):
     for epoch in range(detector.start_epoch, detector.start_epoch + model_details.epochs):
         try:
           detector.train(epoch)
-          detector.test(epoch)
+          # detector.test(epoch)
         except KeyboardInterrupt:
           detector.test(epoch)
           break;
