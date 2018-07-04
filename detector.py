@@ -110,9 +110,9 @@ class Detector(object):
         print("\n==>Total train iteration per epoch:{}".format(len(trainloader)))
         for batch_idx, (inputs, targets) in enumerate(trainloader):
             iteration = epoch * len(trainloader) + batch_idx
-            if iteration in voc['lr_steps']:
-                step_index += 1
-                self.adjust_learning_rate(optimizer, args.gamma, step_index)
+            # if iteration in voc['lr_steps']:
+            #     step_index += 1
+            #     self.adjust_learning_rate(optimizer, args.gamma, step_index)
                 # inputs = Variable(inputs.cuda())
                 # targets = [Variable(ann.cuda(), volatile=True) for ann in targets]
             # else:
@@ -168,6 +168,8 @@ class Detector(object):
             # progress_bar(batch_idx, len(self.trainloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
             #              % (batch_loss, 100. * correct / total, correct, total))
         self.writer.add_scalar('train loss',train_loss, epoch)
+        torch.save(model.state_dict(),'weights/ssd300_mAP_77.43_v2.pth')
+
 
     def save_model(self, acc, epoch):
         print('\n Saving new model with accuracy {}'.format(acc))
@@ -182,7 +184,7 @@ class Detector(object):
 
 
     def test(self,epoch):
-        print('\n==> Test started ')
+        print('\n ==> Test started ')
         model=self.model
         model.eval()
         test_loss = 0
