@@ -135,9 +135,9 @@ class DatasetReader(Dataset):
     def __len__(self):
         return len(self.data)
 from data_reader_pascal_voc import get_data_loader as data_loader_pascal
-from ssd.augmentations import *
+from ssd_more.augmentations import *
 from statics import *
-from ssd import *
+from ssd_more import *
 def get_data_loader(batch_size):
     # train_data_set = DatasetReader(get_train_data(),"train")
     # validation_data_set = DatasetReader(get_validation_data(),"valid")

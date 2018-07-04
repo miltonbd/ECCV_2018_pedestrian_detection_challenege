@@ -8,7 +8,7 @@ from augment_data import augment_images
 from model_loader import *
 from loss_loader import *
 from data_reader_pascal_voc import VOC_CLASSES
-
+from data_reader import *
 """
 sudo nvidia-smi -pl 180
 sudo nvidia-smi --gpu-reset -i 0
@@ -18,10 +18,10 @@ todo download more images using image_utils and isic-arhive. Also, use more onli
 
 """
 
-from ssd.layers.modules.multibox_loss import MultiBoxLoss
+from ssd_more.layers.modules.multibox_loss import MultiBoxLoss
 
 from statics import *
-from ssd import *
+from ssd_more import *
 def get_loss_function(classifier):
     return  MultiBoxLoss(voc['num_classes'], 0.5, True, 0, True, 3, 0.5,
                              False, True)
@@ -63,7 +63,7 @@ def start_training(gpu):
     for epoch in range(detector.start_epoch, detector.start_epoch + model_details.epochs):
         try:
           detector.train(epoch)
-          # detector.test(epoch)
+          detector.test(epoch)
         except KeyboardInterrupt:
           detector.test(epoch)
           break;

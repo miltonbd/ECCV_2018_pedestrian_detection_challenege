@@ -19,11 +19,32 @@ import argparse
 import time
 from models import *
 from utils.utils import progress_bar
+from eval import *
 
-parser = argparse.ArgumentParser(description='PyTorch CIFAR10 Training')
-parser.add_argument('--lr', default=0.1, type=float, help='learning rate')
-parser.add_argument('--resume', '-r', action='store_true', help='resume from checkpoint')
+def str2bool(v):
+    return v.lower() in ("yes", "true", "t", "1")
+
+
+parser = argparse.ArgumentParser(
+    description='Single Shot MultiBox Detector Evaluation')
+parser.add_argument('--trained_model',
+                    default='weights/tmp.pth', type=str,
+                    help='Trained state_dict file path to open')
+parser.add_argument('--save_folder', default='eval/', type=str,
+                    help='File path to save results')
+parser.add_argument('--confidence_threshold', default=0.01, type=float,
+                    help='Detection confidence threshold')
+parser.add_argument('--top_k', default=5, type=int,
+                    help='Further restrict the number of predictions to parse')
+parser.add_argument('--cuda', default=True, type=str2bool,
+                    help='Use cuda to train model')
+parser.add_argument('--voc_root', default=VOC_ROOT,
+                    help='Location of VOC root directory')
+parser.add_argument('--cleanup', default=True, type=str2bool,
+                    help='Cleanup and remove results files following eval')
+
 args = parser.parse_args()
+
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 from statics import *
@@ -38,7 +59,7 @@ class Detector(object):
             os.makedirs(self.log_dir)
         self.writer = SummaryWriter(self.log_dir)
         self.use_cuda = torch.cuda.is_available()
-        self.best_acc = 0  # best test accuracy
+        self.best_map = 0  # best test accuracy
         self.start_epoch = 0  # start from epoch 0 or last checkpoint epoch
         self.net = None
         self.get_loss_function = model_details.get_loss_function
@@ -66,9 +87,9 @@ class Detector(object):
             assert (os.path.isdir('checkpoint'), 'Error: no checkpoint directory found!')
             checkpoint = torch.load('./checkpoint/{}_ckpt.t7'.format(self.model_name_str ))
             model.load_state_dict(checkpoint['model'].state_dict())
-            self.best_acc = checkpoint['acc']
+            self.best_map = checkpoint['map']
             self.start_epoch = checkpoint['epoch']
-            print('==> Resuming from checkpoint with Accuracy {}..'.format(self.best_acc))
+            print('==> Resuming from checkpoint with Accuracy {}..'.format(self.best_map))
 
         except Exception as e:
             print('==> Resume Failed and Building model..')
@@ -168,14 +189,13 @@ class Detector(object):
             # progress_bar(batch_idx, len(self.trainloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
             #              % (batch_loss, 100. * correct / total, correct, total))
         self.writer.add_scalar('train loss',train_loss, epoch)
-        torch.save(model.state_dict(),'weights/ssd300_mAP_77.43_v2.pth')
+        torch.save(model.state_dict(), args.trained_model)
 
-
-    def save_model(self, acc, epoch):
-        print('\n Saving new model with accuracy {}'.format(acc))
+    def save_model(self, map, epoch):
+        print('\n Saving new model with mAP {}'.format(map))
         state = {
             'model': self.model,
-            'acc': acc,
+            'map': map,
             'epoch': epoch,
         }
         if not os.path.isdir('checkpoint'):
@@ -185,96 +205,29 @@ class Detector(object):
 
     def test(self,epoch):
         print('\n ==> Test started ')
-        model=self.model
+        num_classes = len(labelmap) + 1  # +1 for background
+        model = build_ssd('test', 300, num_classes)  # initialize SSD
+        model.load_state_dict(torch.load(args.trained_model))
         model.eval()
-        test_loss = 0
-        correct = 0
-        total = 0
-        target_all = []
-        predicted_all = []
-        testloader = self.testloader
-        loc_loss = 0
-        conf_loss = 0
-        # all detections are collected into:
-        #    all_boxes[cls][image] = N x 5 array of detections in
-        #    (x1, y1, x2, y2, score)
-        num_images=len(testloader.dataset)
-        all_boxes = [[[] for _ in range(num_images)]
-                     for _ in range(len(self.model_details.class_names) + 1)]
-        _t = {'im_detect': Timer(), 'misc': Timer()}
-        with torch.no_grad():
-            for batch_idx, (inputs, targets) in enumerate(testloader):
-                iteration = epoch * len(testloader) + batch_idx
-                inputs = Variable(inputs)
-                targets = [Variable(ann, volatile=True) for ann in targets]
-                # forward
-                t0 = time.time()
-                inputs = inputs.cuda()
-                outputs = model(inputs)
-                for i, out_image in enumerate(outputs):
-                    detections = out_image.data
-                    detect_time = _t['im_detect'].toc(average=False)
-                    # skip j = 0, because it's the background class
-                    for j in range(1, detections.size(1)):
-                        dets = detections[0, j, :]
-                        mask = dets[:, 0].gt(0.).expand(5, dets.size(0)).t()
-                        dets = torch.masked_select(dets, mask).view(-1, 5)
-                        if dets.dim() == 0 or dets:
-                            continue
-                        boxes = dets[:, 1:]
-                        boxes[:, 0] *= w
-                        boxes[:, 2] *= w
-                        boxes[:, 1] *= h
-                        boxes[:, 3] *= h
-                        scores = dets[:, 0].cpu().numpy()
-                        cls_dets = np.hstack((boxes.cpu().numpy(),
-                                              scores[:, np.newaxis])).astype(np.float32,
-                                                                             copy=False)
-                        all_boxes[j][i] = cls_dets
+        print('Finished loading model!')
+        # load data
+        dataset = VOCDetection(VOC_ROOT, [('2007', set_type)],
+                               BaseTransform(300, dataset_mean),
+                               VOCAnnotationTransform())
 
-                    print('im_detect: {:d}/{:d} {:.3f}s'.format(i + 1,
-                                                                num_images, detect_time))
-
-                # backprop
-                optimizer.zero_grad()
-                loss_l, loss_c = self.criterion(outputs, targets)
-                loss = loss_l + loss_c
-                t1 = time.time()
-                loc_loss += loss_l.data[0]
-                conf_loss += loss_c.data[0]
-
-                if iteration % 10 == 0:
-                    print('timer: %.4f sec.' % (t1 - t0))
-                    print('iter ' + repr(iteration) + ' || Loss: %.4f ||' % (loss.data[0]), end=' ')
-                # inputs, targets = inputs.to(device), targets.to(device)
-                # outputs = model(inputs)
-                # loss = self.criterion(outputs, targets)
-                #
-                # test_loss += loss.item()
-                # _, predicted = outputs.max(1)
-                # predicted_reshaped = predicted.cpu().numpy().reshape(-1)
-                # predicted_all = np.concatenate((predicted_all, predicted_reshaped), axis=0)
-                #
-                # targets_reshaped = targets.data.cpu().numpy().reshape(-1)
-                # target_all = np.concatenate((target_all, targets_reshaped), axis=0)
-                # total += targets.size(0)
-                # correct += predicted.eq(targets).sum().item()
-                #
-                # progress_bar(batch_idx, len(self.testloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
-                #              % (test_loss / (batch_idx + 1), 100. * correct / total, correct, total))
+        mAP=test_net(args.save_folder, model, args.cuda, dataset,
+                 BaseTransform(model.size, dataset_mean), args.top_k, 300,
+                 thresh=args.confidence_threshold)
 
         # Save checkpoint.
-        acc = 100. * correct / total
-        self.writer.add_scalar('test accuracy', acc, epoch)
-        self.writer.add_scalar('test loss', test_loss, epoch)
+        self.writer.add_scalar('mAP', mAP, epoch)
+        # self.writer.add_scalar('test loss', test_loss, epoch)
 
 
-        print("Accuracy:{}".format(acc))
-        if acc > self.best_acc:
-            self.save_model(acc, epoch)
-            self.best_acc = acc
-        cm = metrics.confusion_matrix(target_all, predicted_all)
-        print("\nConfsusion metrics: \n{}".format(cm))
+        print("MAP:{}".format(mAP))
+        if mAP > self.best_map:
+            self.save_model(mAP, epoch)
+            self.best_map = mAP
 
 class Timer(object):
     """A simple timer."""
