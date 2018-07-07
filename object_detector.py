@@ -196,12 +196,9 @@ class Detector(object):
         # loss counters
         loc_loss = 0  # epoch
         conf_loss = 0
-        epoch = 0
         args=self.model_details.args
-        if args.resume_net:
-            epoch = 0 + args.resume_epoch
-        # epoch_size = len(train_dataset) // args.batch_size
-        epoch_size=100
+        epoch_size = len(self.trainloader)// args.batch_size
+        print("iterations per epoch:{}".format(epoch_size))
         max_iter = args.epochs * epoch_size
 
         stepvalues_VOC = (150 * epoch_size, 200 * epoch_size, 250 * epoch_size)
@@ -210,8 +207,6 @@ class Detector(object):
         # print('Training', args.version, 'on', train_dataset.name)
         step_index = 0
         optimizer=self.optimizer
-        loc_loss = 0
-        conf_loss = 0
 
         if args.visdom:
             # initialize visdom loss plot
@@ -235,17 +230,13 @@ class Detector(object):
                     legend=['Loc Loss', 'Conf Loss', 'Loss']
                 )
             )
-        if args.resume_epoch > 0:
-            start_iter = args.resume_epoch * epoch_size
-        else:
-            start_iter = 0
 
-        batch_iterator = None # tood set None after epoch
         mean_loss_c = 0 # tood set None after epoch
         mean_loss_l = 0# tood set None after epoch
         batch_iterator = iter(self.trainloader)
 
-        for iteration in range(start_iter, max_iter + 10):
+        for batch_idx, (images, targets) in enumerate(self.trainloader):
+            iteration = epoch * len(self.trainloader) + batch_idx
 
             load_t0 = time.time()
             if iteration in stepvalues:
@@ -261,7 +252,6 @@ class Detector(object):
             lr = self.adjust_learning_rate(optimizer, args.gamma, epoch, step_index, iteration, epoch_size)
 
             # load train data
-            images, targets = next(batch_iterator)
 
             # print(np.sum([torch.sum(anno[:,-1] == 2) for anno in targets]))
 
@@ -304,9 +294,6 @@ class Detector(object):
                 if args.visdom and args.send_images_to_visdom:
                     random_batch_index = np.random.randint(images.size(0))
                     viz.image(images.data[random_batch_index].cpu().numpy())
-            break
-        # torch.save(net.state_dict(), os.path.join(save_folder,
-        #                                           'Final_' + args.version + '_' + args.dataset + '.pth'))
 
 
 
@@ -345,5 +332,9 @@ class Detector(object):
                             top_k, thresh=0.01,model_details=self.model_details)
         APs = [str(num) for num in APs]
         mAP = str(mAP)
+        print("mAP:{}".format(mAP))
+        # torch.save(net.state_dict(), os.path.join(save_folder,
+        #                                           'Final_' + args.version + '_' + args.dataset + '.pth'))
+
 
 
