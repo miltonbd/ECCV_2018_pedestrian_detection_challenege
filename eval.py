@@ -9,12 +9,8 @@ import torch
 import torch.nn as nn
 import torch.backends.cudnn as cudnn
 from torch.autograd import Variable
-from data import VOC_ROOT, VOCAnnotationTransform, VOCDetection, BaseTransform
-from data import VOC_CLASSES as labelmap
 import torch.utils.data as data
-
-from ssd import build_ssd
-
+from data import *
 import sys
 import os
 import time
@@ -46,7 +42,7 @@ parser.add_argument('--top_k', default=5, type=int,
                     help='Further restrict the number of predictions to parse')
 parser.add_argument('--cuda', default=True, type=str2bool,
                     help='Use cuda to train model')
-parser.add_argument('--voc_root', default=VOC_ROOT,
+parser.add_argument('--voc_root', default="",
                     help='Location of VOC root directory')
 parser.add_argument('--cleanup', default=True, type=str2bool,
                     help='Cleanup and remove results files following eval')

@@ -1,15 +1,16 @@
+# coding=utf-8
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
-from utils.box_utils import match, log_sum_exp
+from utils.box_utils import match,refine_match, log_sum_exp,decode
 GPU = False
 if torch.cuda.is_available():
     GPU = True
     torch.set_default_tensor_type('torch.cuda.FloatTensor')
 
 
-class MultiBoxLoss(nn.Module):
+class RefineMultiBoxLoss(nn.Module):
     """SSD Weighted Loss Function
     Compute Targets:
         1) Produce Confidence Target Indices by matching  ground truth boxes
@@ -33,8 +34,8 @@ class MultiBoxLoss(nn.Module):
     """
 
 
-    def __init__(self, num_classes,overlap_thresh,prior_for_matching,bkg_label,neg_mining,neg_pos,neg_overlap,encode_target):
-        super(MultiBoxLoss, self).__init__()
+    def __init__(self, num_classes,overlap_thresh,prior_for_matching,bkg_label,neg_mining,neg_pos,neg_overlap,encode_target,object_score = 0):
+        super(RefineMultiBoxLoss, self).__init__()
         self.num_classes = num_classes
         self.threshold = overlap_thresh
         self.background_label = bkg_label
@@ -43,9 +44,10 @@ class MultiBoxLoss(nn.Module):
         self.do_neg_mining = neg_mining
         self.negpos_ratio = neg_pos
         self.neg_overlap = neg_overlap
+        self.object_score = object_score
         self.variance = [0.1,0.2]
 
-    def forward(self, predictions, priors, targets):
+    def forward(self, odm_data,priors, targets,arm_data = None,filter_object = False):
         """Multibox Loss
         Args:
             predictions (tuple): A tuple containing loc preds, conf preds,
@@ -56,13 +58,16 @@ class MultiBoxLoss(nn.Module):
 
             ground_truth (tensor): Ground truth boxes and labels for a batch,
                 shape: [batch_size,num_objs,5] (last idx is the label).
+            arm_data (tuple): arm branch containg arm_loc and arm_conf
+            filter_object: whether filter out the  prediction according to the arm conf score
         """
 
-        loc_data, conf_data = predictions
-        priors = priors
+        loc_data,conf_data = odm_data
+        if arm_data:
+            arm_loc,arm_conf = arm_data
+        priors = priors.data
         num = loc_data.size(0)
         num_priors = (priors.size(0))
-        num_classes = self.num_classes
 
         # match priors (default boxes) and ground truth boxes
         loc_t = torch.Tensor(num, num_priors, 4)
@@ -70,16 +75,27 @@ class MultiBoxLoss(nn.Module):
         for idx in range(num):
             truths = targets[idx][:,:-1].data
             labels = targets[idx][:,-1].data
-            defaults = priors.data
-            match(self.threshold,truths,defaults,self.variance,labels,loc_t,conf_t,idx)
+            #for object detection
+            if self.num_classes == 2:
+                labels = labels > 0
+            if arm_data:
+                refine_match(self.threshold,truths,priors,self.variance,labels,loc_t,conf_t,idx,arm_loc[idx].data)
+            else:
+                match(self.threshold,truths,priors,self.variance,labels,loc_t,conf_t,idx)
         if GPU:
             loc_t = loc_t.cuda()
             conf_t = conf_t.cuda()
         # wrap targets
         loc_t = Variable(loc_t, requires_grad=False)
         conf_t = Variable(conf_t,requires_grad=False)
+        if arm_data and filter_object:
+            arm_conf_data = arm_conf.data[:,:,1]
+            pos = conf_t > 0
+            object_score_index = arm_conf_data <= self.object_score
+            pos[object_score_index] = 0
 
-        pos = conf_t > 0
+        else:
+            pos = conf_t > 0
 
         # Localization Loss (Smooth L1)
         # Shape: [batch,num_priors,4]
@@ -93,7 +109,7 @@ class MultiBoxLoss(nn.Module):
         loss_c = log_sum_exp(batch_conf) - batch_conf.gather(1, conf_t.view(-1,1))
 
         # Hard Negative Mining
-        loss_c[pos.view(-1,1)] = 0 # filter out pos boxes for now
+        loss_c[pos] = 0 # filter out pos boxes for now
         loss_c = loss_c.view(num, -1)
         _,loss_idx = loss_c.sort(1, descending=True)
         _,idx_rank = loss_idx.sort(1)
@@ -109,8 +125,7 @@ class MultiBoxLoss(nn.Module):
         loss_c = F.cross_entropy(conf_p, targets_weighted, size_average=False)
 
         # Sum of losses: L(x,c,l,g) = (Lconf(x, c) + αLloc(x,l,g)) / N
-
-        N = num_pos.data.float().sum()
+        N = num_pos.data.sum()
         loss_l/=N
         loss_c/=N
         return loss_l,loss_c

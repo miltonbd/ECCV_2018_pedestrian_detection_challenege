@@ -6,16 +6,35 @@ import numpy as np
 import imageio
 import torch
 from torchvision import transforms
-from statics_isic import *
 import glob
 from PIL import Image
 import os
 from torchvision.transforms import *
 import threading
-num_classes=7
-height=224
-width=224
 data_set_name="ISIC 2018"
+import argparse
+import pickle
+import time
+
+import numpy as np
+import os
+import torch
+import torch.backends.cudnn as cudnn
+import torch.nn.init as init
+import torch.optim as optim
+import torch.utils.data as data
+from torch.autograd import Variable
+
+from data import VOCroot, COCOroot, VOC_300, VOC_512, COCO_300, COCO_512, COCO_mobile_300, AnnotationTransform, \
+    COCODetection, VOCDetection, detection_collate, BaseTransform, preproc
+from layers.functions import Detect, PriorBox
+from layers.modules import MultiBoxLoss
+from utils.nms_wrapper import nms
+from utils.timer import Timer
+
+
+def str2bool(v):
+    return v.lower() in ("yes", "true", "t", "1")
 
 """
  	    Train 	Val 	Test
@@ -134,22 +153,34 @@ class DatasetReader(Dataset):
 
     def __len__(self):
         return len(self.data)
-from data_reader_pascal_voc import get_data_loader as data_loader_pascal
-from ssd_more.augmentations import *
 from statics import *
-from ssd_more import *
-def get_data_loader(batch_size):
-    # train_data_set = DatasetReader(get_train_data(),"train")
-    # validation_data_set = DatasetReader(get_validation_data(),"valid")
-    # trainloader = torch.utils.data.DataLoader(train_data_set, batch_size=batch_size, shuffle=True,
-    #                                           num_workers=2)
-    # valloader = torch.utils.data.DataLoader(validation_data_set, batch_size=batch_size, shuffle=False,
-    #                                           num_workers=2)
-    train_transform=SSDAugmentation(voc['min_dim'],
-                    MEANS)
-    test_transform=BaseTransform(300, MEANS)
-    trainloader, valloader = data_loader_pascal(batch_size,train_transform,test_transform )
-    return (trainloader, valloader)
+from utils import *
+from data import *
+def get_data_loader(args):
+    return get_voc_reader(args)
+
+def get_voc_reader(args):
+    img_dim=args.size
+    rgb_means = (104, 117, 123)
+    rgb_std = (1, 1, 1)
+    p = (0.6, 0.2)[args.version == 'RFB_mobile']
+    train_sets = [('2007', 'trainval'), ('2012', 'trainval')]
+    cfg = (VOC_300, VOC_512)[args.size == '512']
+
+    testset = VOCDetection(
+        VOCroot, [('2007', 'test')], None, AnnotationTransform())
+    train_dataset = VOCDetection(VOCroot, train_sets, preproc(
+        img_dim, rgb_means, rgb_std, p), AnnotationTransform())
+
+    trainloader = torch.utils.data.DataLoader(train_dataset, args.batch_size,
+                                              shuffle=True, num_workers=args.num_workers,
+                                              collate_fn=detection_collate)
+    # test_data_set = VOCDetection(VOC_ROOT, [('2007', 'test')], None, VOCAnnotationTransform())
+    # testloader = torch.utils.data.DataLoader(test_data_set, batch_size=batch_size, shuffle=True,
+    #                                          num_workers=2)
+
+    return (trainloader, trainloader)
+
 
 def test():
     trainloader, valloader = get_data_loader(100)

@@ -1,13 +1,22 @@
-from __future__ import division
-from math import sqrt as sqrt
 from itertools import product as product
+from math import sqrt as sqrt
+
 import torch
+
+if torch.cuda.is_available():
+    torch.set_default_tensor_type('torch.cuda.FloatTensor')
 
 
 class PriorBox(object):
     """Compute priorbox coordinates in center-offset form for each source
     feature map.
+    Note:
+    This 'layer' has changed between versions of the original SSD
+    paper, so we include both versions, but note v2 is the most tested and most
+    recent version of the paper.
+
     """
+
     def __init__(self, cfg):
         super(PriorBox, self).__init__()
         self.image_size = cfg['min_dim']
@@ -20,7 +29,6 @@ class PriorBox(object):
         self.steps = cfg['steps']
         self.aspect_ratios = cfg['aspect_ratios']
         self.clip = cfg['clip']
-        self.version = cfg['name']
         for v in self.variance:
             if v <= 0:
                 raise ValueError('Variances must be greater than 0')
@@ -30,24 +38,23 @@ class PriorBox(object):
         for k, f in enumerate(self.feature_maps):
             for i, j in product(range(f), repeat=2):
                 f_k = self.image_size / self.steps[k]
-                # unit center x,y
                 cx = (j + 0.5) / f_k
                 cy = (i + 0.5) / f_k
 
-                # aspect_ratio: 1
-                # rel size: min_size
-                s_k = self.min_sizes[k]/self.image_size
+                s_k = self.min_sizes[k] / self.image_size
                 mean += [cx, cy, s_k, s_k]
 
                 # aspect_ratio: 1
                 # rel size: sqrt(s_k * s_(k+1))
-                s_k_prime = sqrt(s_k * (self.max_sizes[k]/self.image_size))
-                mean += [cx, cy, s_k_prime, s_k_prime]
+                if self.max_sizes:
+                    s_k_prime = sqrt(s_k * (self.max_sizes[k] / self.image_size))
+                    mean += [cx, cy, s_k_prime, s_k_prime]
 
                 # rest of aspect ratios
                 for ar in self.aspect_ratios[k]:
-                    mean += [cx, cy, s_k*sqrt(ar), s_k/sqrt(ar)]
-                    mean += [cx, cy, s_k/sqrt(ar), s_k*sqrt(ar)]
+                    mean += [cx, cy, s_k * sqrt(ar), s_k / sqrt(ar)]
+                    mean += [cx, cy, s_k / sqrt(ar), s_k * sqrt(ar)]
+
         # back to torch land
         output = torch.Tensor(mean).view(-1, 4)
         if self.clip:

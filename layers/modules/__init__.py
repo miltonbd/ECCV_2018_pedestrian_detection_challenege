@@ -1,4 +1,5 @@
-from .l2norm import L2Norm
 from .multibox_loss import MultiBoxLoss
+from .refine_multibox_loss import RefineMultiBoxLoss
+from .l2norm import L2Norm
 
-__all__ = ['L2Norm', 'MultiBoxLoss']
+__all__ = ['MultiBoxLoss','L2Norm']

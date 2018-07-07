@@ -38,7 +38,7 @@ parser.add_argument('--top_k', default=5, type=int,
                     help='Further restrict the number of predictions to parse')
 parser.add_argument('--cuda', default=True, type=str2bool,
                     help='Use cuda to train model')
-parser.add_argument('--voc_root', default=VOC_ROOT,
+parser.add_argument('--voc_root', default=VOCroot,
                     help='Location of VOC root directory')
 parser.add_argument('--cleanup', default=True, type=str2bool,
                     help='Cleanup and remove results files following eval')
@@ -71,8 +71,8 @@ class Detector(object):
     def load_data(self):
         print('==> Preparing data of {}..'.format(self.model_details.dataset))
         self.trainloader, self.testloader = self.model_details.dataset_loader #[trainloader, test_loader]
-        train_count = len(self.trainloader) * self.model_details.batch_size
-        test_count = len(self.testloader) * self.model_details.batch_size
+        train_count = len(self.trainloader) * self.model_details.args.batch_size
+        test_count = len(self.testloader) * self.model_details.args.batch_size
         print('==> Total examples, train: {}, test:{}'.format(train_count, test_count))
 
     def load_model(self):
@@ -105,91 +105,140 @@ class Detector(object):
     def adjust_weight_with_steps(self):
         pass
 
-    def adjust_learning_rate(optimizer, gamma, step):
-        """Sets the learning rate to the initial LR decayed by 10 at every
-            specified step
+    def adjust_learning_rate(self,optimizer, gamma, epoch, step_index, iteration, epoch_size):
+        """Sets the learning rate
         # Adapted from PyTorch Imagenet example:
         # https://github.com/pytorch/examples/blob/master/imagenet/main.py
         """
-        lr = args.lr * (gamma ** (step))
+        args=self.model_details.args
+        if epoch < args.warm_epoch:
+            lr = 1e-6 + (args.lr - 1e-6) * iteration / (epoch_size * args.warm_epoch)
+        else:
+            lr = args.lr * (gamma ** (step_index))
         for param_group in optimizer.param_groups:
             param_group['lr'] = lr
+        return lr
 
     # Training
     def train(self, epoch):
         print('\n==> Training started with Epoch : %d' % epoch)
-        model=self.model
-        model.train()
-        train_loss = 0
-        correct = 0
-        total = 0
-        trainloader=self.trainloader
-        optimizer=self.optimizer
+        net=self.model_details.model
+        net.train()
+        # loss counters
+        loc_loss = 0  # epoch
+        conf_loss = 0
+        epoch = 0
+        args=self.model_details.args
+        if args.resume_net:
+            epoch = 0 + args.resume_epoch
+        # epoch_size = len(train_dataset) // args.batch_size
+        epoch_size=100
+        max_iter = args.epochs * epoch_size
+
+        stepvalues_VOC = (150 * epoch_size, 200 * epoch_size, 250 * epoch_size)
+        stepvalues_COCO = (90 * epoch_size, 120 * epoch_size, 140 * epoch_size)
+        stepvalues = (stepvalues_VOC, stepvalues_COCO)[args.dataset == 'COCO']
+        # print('Training', args.version, 'on', train_dataset.name)
         step_index = 0
+        optimizer=self.optimizer
         loc_loss = 0
         conf_loss = 0
-        print("\n==>Total train iteration per epoch:{}".format(len(trainloader)))
-        for batch_idx, (inputs, targets) in enumerate(trainloader):
-            iteration = epoch * len(trainloader) + batch_idx
-            # if iteration in voc['lr_steps']:
-            #     step_index += 1
-            #     self.adjust_learning_rate(optimizer, args.gamma, step_index)
-                # inputs = Variable(inputs.cuda())
-                # targets = [Variable(ann.cuda(), volatile=True) for ann in targets]
-            # else:
-            inputs = Variable(inputs.cuda())
-            targets = [Variable(ann.cuda(), volatile=True).cuda() for ann in targets]
 
+        if args.visdom:
+            # initialize visdom loss plot
+            lot = viz.line(
+                X=torch.zeros((1,)).cpu(),
+                Y=torch.zeros((1, 3)).cpu(),
+                opts=dict(
+                    xlabel='Iteration',
+                    ylabel='Loss',
+                    title='Current SSD Training Loss',
+                    legend=['Loc Loss', 'Conf Loss', 'Loss']
+                )
+            )
+            epoch_lot = viz.line(
+                X=torch.zeros((1,)).cpu(),
+                Y=torch.zeros((1, 3)).cpu(),
+                opts=dict(
+                    xlabel='Epoch',
+                    ylabel='Loss',
+                    title='Epoch SSD Training Loss',
+                    legend=['Loc Loss', 'Conf Loss', 'Loss']
+                )
+            )
+        if args.resume_epoch > 0:
+            start_iter = args.resume_epoch * epoch_size
+        else:
+            start_iter = 0
+
+        batch_iterator = None # tood set None after epoch
+        mean_loss_c = 0 # tood set None after epoch
+        mean_loss_l = 0# tood set None after epoch
+        batch_iterator = iter(self.trainloader)
+
+        for iteration in range(start_iter, max_iter + 10):
+
+            load_t0 = time.time()
+            if iteration in stepvalues:
+                step_index = stepvalues.index(iteration) + 1
+                if args.visdom:
+                    viz.line(
+                        X=torch.ones((1, 3)).cpu() * epoch,
+                        Y=torch.Tensor([loc_loss, conf_loss,
+                                        loc_loss + conf_loss]).unsqueeze(0).cpu() / epoch_size,
+                        win=epoch_lot,
+                        update='append'
+                    )
+            lr = self.adjust_learning_rate(optimizer, args.gamma, epoch, step_index, iteration, epoch_size)
+
+            # load train data
+            images, targets = next(batch_iterator)
+
+            # print(np.sum([torch.sum(anno[:,-1] == 2) for anno in targets]))
+
+            if args.cuda:
+                images = Variable(images.cuda())
+                targets = [Variable(anno.cuda(), volatile=True) for anno in targets]
+            else:
+                images = Variable(images)
+                targets = [Variable(anno, volatile=True) for anno in targets]
             # forward
-            t0 = time.time()
-            inputs=inputs
-            out = model(inputs)
+            out = net(images)
             # backprop
             optimizer.zero_grad()
-            out=[o.cuda() for o in out]
-            loss_l, loss_c = self.criterion(out, targets)
+            # arm branch loss
+            loss_l, loss_c = self.criterion(out, self.model_details.priors, targets)
+            # odm branch loss
+
+            mean_loss_c += loss_c.data[0]
+            mean_loss_l += loss_l.data[0]
+
             loss = loss_l + loss_c
             loss.backward()
             optimizer.step()
-            t1 = time.time()
-            loc_loss += loss_l.data[0]
-            conf_loss += loss_c.data[0]
-
+            load_t1 = time.time()
             if iteration % 10 == 0:
-                print('timer: %.4f sec.' % (t1 - t0))
-                print('epoch:{} '+str(epoch)+', Iteration:{} ' + repr(iteration) + ' || Loss: %.4f ||' % (loss.data[0]), end=' ')
-                # progress_bar(batch_idx, len(self.trainloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
-                #              % (batch_loss, 100. * correct / total, correct, total))
+                print('Epoch:' + repr(epoch) + ' || epochiter: ' + repr(iteration % epoch_size) + '/' + repr(epoch_size)
+                      + '|| Totel iter ' +
+                      repr(iteration) + ' || L: %.4f C: %.4f||' % (
+                          mean_loss_l / 10, mean_loss_c / 10) +
+                      'Batch time: %.4f sec. ||' % (load_t1 - load_t0) + 'LR: %.8f' % (lr))
+                # log_file.write(
+                #     'Epoch:' + repr(epoch) + ' || epochiter: ' + repr(iteration % epoch_size) + '/' + repr(epoch_size)
+                #     + '|| Totel iter ' +
+                #     repr(iteration) + ' || L: %.4f C: %.4f||' % (
+                #         mean_loss_l / 10, mean_loss_c / 10) +
+                #     'Batch time: %.4f sec. ||' % (load_t1 - load_t0) + 'LR: %.8f' % (lr) + '\n')
 
-            # if iteration != 0 and iteration % 1000 == 0:
-            #     print('Saving state, iter:', iteration)
-            #     torch.save(ssd_net.state_dict(), 'weights/ssd300_COCO_' +
-            #                repr(iteration) + '.pth')
+                mean_loss_c = 0
+                mean_loss_l = 0
+                if args.visdom and args.send_images_to_visdom:
+                    random_batch_index = np.random.randint(images.size(0))
+                    viz.image(images.data[random_batch_index].cpu().numpy())
+        # torch.save(net.state_dict(), os.path.join(save_folder,
+        #                                           'Final_' + args.version + '_' + args.dataset + '.pth'))
 
 
-            # step = epoch * len(self.trainloader) + batch_idx
-            # # if not self.augment_images==None:
-            # #     inputs=torch.from_numpy(self.augment_images(inputs.numpy()))
-            # inputs, targets = inputs.to(device), targets.to(device)
-            # self.optimizer.zero_grad()
-            #
-            #
-            # outputs = model(inputs)
-            # loss = self.criterion(outputs, targets)
-            # loss.backward()
-            # self.optimizer.step()
-            # train_loss += loss.item()
-            # _, predicted = outputs.max(1)
-            # batch_loss = train_loss / (batch_idx + 1)
-            # if batch_idx % 5 == 0:
-            #     self.writer.add_scalar('step loss', batch_loss, step)
-            # total += targets.size(0)
-            # correct += predicted.eq(targets.data).cpu().sum()
-            #
-            # progress_bar(batch_idx, len(self.trainloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d)'
-            #              % (batch_loss, 100. * correct / total, correct, total))
-        self.writer.add_scalar('train loss',train_loss, epoch)
-        torch.save(model.state_dict(), args.trained_model)
 
     def save_model(self, map, epoch):
         print('\n Saving new model with mAP {}'.format(map))
