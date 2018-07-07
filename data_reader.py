@@ -45,7 +45,6 @@ todo ignore parts set zero
 """
 
 data_set_name="Wider Face Pedestrian dataset."
-num_classes=1
 
 def read_train_gt():
     annotations=[]
@@ -169,17 +168,17 @@ def get_voc_reader(args):
 
     testset = VOCDetection(
         VOCroot, [('2007', 'test')], None, AnnotationTransform())
+
     train_dataset = VOCDetection(VOCroot, train_sets, preproc(
         img_dim, rgb_means, rgb_std, p), AnnotationTransform())
 
     trainloader = torch.utils.data.DataLoader(train_dataset, args.batch_size,
                                               shuffle=True, num_workers=args.num_workers,
                                               collate_fn=detection_collate)
-    # test_data_set = VOCDetection(VOC_ROOT, [('2007', 'test')], None, VOCAnnotationTransform())
-    # testloader = torch.utils.data.DataLoader(test_data_set, batch_size=batch_size, shuffle=True,
-    #                                          num_workers=2)
+    num_classes=len(args.classes.split(","))
+    detector = Detect(num_classes, 0, cfg)
 
-    return (trainloader, trainloader)
+    return (trainloader, (testset,detector))
 
 
 def test():

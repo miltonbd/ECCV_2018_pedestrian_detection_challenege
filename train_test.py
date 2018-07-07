@@ -291,6 +291,7 @@ def train():
             epoch += 1
 
         load_t0 = time.time()
+        break
         if iteration in stepvalues:
             step_index = stepvalues.index(iteration) + 1
             if args.visdom:
@@ -347,6 +348,17 @@ def train():
             if args.visdom and args.send_images_to_visdom:
                 random_batch_index = np.random.randint(images.size(0))
                 viz.image(images.data[random_batch_index].cpu().numpy())
+
+
+    net.eval()
+    top_k = (300, 200)[args.dataset == 'COCO']
+    if args.dataset == 'VOC':
+        APs, mAP = test_net(test_save_dir, net, detector, args.cuda, testset,
+                            BaseTransform(net.module.size, rgb_means, rgb_std, (2, 0, 1)),
+                            top_k, thresh=0.01)
+        APs = [str(num) for num in APs]
+        mAP = str(mAP)
+
     log_file.close()
     torch.save(net.state_dict(), os.path.join(save_folder,
                                               'Final_' + args.version + '_' + args.dataset + '.pth'))

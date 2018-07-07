@@ -3,7 +3,7 @@ gpu=0
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu)
 os.environ['CUDA_LAUNCH_BLOCKING'] = str(gpu)
-from detector import Detector
+from object_detector import Detector
 from torch import optim
 from augment_data import augment_images
 from model_loader import *
@@ -47,7 +47,7 @@ parser.add_argument('-v', '--version', default='RFB_vgg',
                     help='RFB_vgg ,RFB_E_vgg RFB_mobile SSD_vgg version.')
 parser.add_argument('-s', '--size', default='300',type=int,
                     help='300 or 512 input size.')
-parser.add_argument('-d', '--dataset', default='COCO',
+parser.add_argument('-d', '--dataset', default='VOC',
                     help='VOC or COCO dataset')
 
 parser.add_argument('-classes', default=classes_delimited,type=str,
@@ -139,6 +139,7 @@ def get_prior():
 class ModelDetails(object):
     def __init__(self,args):
         self.args=args
+        self.priors=get_prior()
         self.model,self.model_name_str = get_model(args)
         self.logs_dir  = "logs/{}/{}".format(args.gpu,self.model_name_str)
         self.augment_images = augment_images
@@ -147,7 +148,6 @@ class ModelDetails(object):
         self.get_optimizer = get_optimizer
         self.dataset=data_set_name
         self.class_names=VOC_CLASSES
-        self.priors=get_prior()
 
 
 def start_training(args):

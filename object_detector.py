@@ -3,7 +3,8 @@ from __future__ import print_function
 
 from sklearn import metrics
 import torch
-
+from utils.nms_wrapper import nms
+from utils.timer import Timer
 import numpy as np
 import os
 from tensorboardX import SummaryWriter
@@ -13,6 +14,7 @@ from torchsummary import summary
 from utils import *
 from torch.backends import cudnn
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+from utils.nms_wrapper import nms
 
 import os
 import argparse
@@ -24,30 +26,97 @@ from eval import *
 def str2bool(v):
     return v.lower() in ("yes", "true", "t", "1")
 
-
-parser = argparse.ArgumentParser(
-    description='Single Shot MultiBox Detector Evaluation')
-parser.add_argument('--trained_model',
-                    default='weights/tmp.pth', type=str,
-                    help='Trained state_dict file path to open')
-parser.add_argument('--save_folder', default='eval/', type=str,
-                    help='File path to save results')
-parser.add_argument('--confidence_threshold', default=0.01, type=float,
-                    help='Detection confidence threshold')
-parser.add_argument('--top_k', default=5, type=int,
-                    help='Further restrict the number of predictions to parse')
-parser.add_argument('--cuda', default=True, type=str2bool,
-                    help='Use cuda to train model')
-parser.add_argument('--voc_root', default=VOCroot,
-                    help='Location of VOC root directory')
-parser.add_argument('--cleanup', default=True, type=str2bool,
-                    help='Cleanup and remove results files following eval')
-
-args = parser.parse_args()
-
-
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 from statics import *
+
+
+def test_net(save_folder, net, detector, cuda, testset, transform, max_per_image=300, thresh=0.005,model_details=None):
+    args=model_details.args
+    if not os.path.exists(save_folder):
+        os.mkdir(save_folder)
+    # dump predictions and assoc. ground truth to text file for now
+    num_images = len(testset)
+
+    num_classes = (21, 81)[args.dataset == 'COCO']
+    all_boxes = [[[] for _ in range(num_images)]
+                 for _ in range(num_classes)]
+
+    _t = {'im_detect': Timer(), 'misc': Timer()}
+    det_file = os.path.join(save_folder, 'detections.pkl')
+
+    if args.retest:
+        f = open(det_file, 'rb')
+        all_boxes = pickle.load(f)
+        print('Evaluating detections')
+        testset.evaluate_detections(all_boxes, save_folder)
+        return
+
+    for i in range(num_images):
+        img = testset.pull_image(i)
+        x = Variable(transform(img).unsqueeze(0), volatile=True)
+        if cuda:
+            x = x.cuda()
+
+        _t['im_detect'].tic()
+        out = net(x=x, test=True)  # forward pass
+        boxes, scores = detector.forward(out, model_details.priors)
+        detect_time = _t['im_detect'].toc()
+        boxes = boxes[0]
+        scores = scores[0]
+
+        boxes = boxes.cpu().numpy()
+        scores = scores.cpu().numpy()
+        # scale each detection back up to the image
+        scale = torch.Tensor([img.shape[1], img.shape[0],
+                              img.shape[1], img.shape[0]]).cpu().numpy()
+        boxes *= scale
+
+        _t['misc'].tic()
+
+        for j in range(1, num_classes):
+            inds = np.where(scores[:, j] > thresh)[0]
+            if len(inds) == 0:
+                all_boxes[j][i] = np.empty([0, 5], dtype=np.float32)
+                continue
+            c_bboxes = boxes[inds]
+            c_scores = scores[inds, j]
+            c_dets = np.hstack((c_bboxes, c_scores[:, np.newaxis])).astype(
+                np.float32, copy=False)
+            if args.dataset == 'VOC':
+                cpu = False
+            else:
+                cpu = False
+
+            keep = nms(c_dets, 0.45, force_cpu=cpu)
+            keep = keep[:50]
+            c_dets = c_dets[keep, :]
+            all_boxes[j][i] = c_dets
+        if max_per_image > 0:
+            image_scores = np.hstack([all_boxes[j][i][:, -1] for j in range(1, num_classes)])
+            if len(image_scores) > max_per_image:
+                image_thresh = np.sort(image_scores)[-max_per_image]
+                for j in range(1, num_classes):
+                    keep = np.where(all_boxes[j][i][:, -1] >= image_thresh)[0]
+                    all_boxes[j][i] = all_boxes[j][i][keep, :]
+
+        nms_time = _t['misc'].toc()
+
+        if i % 20 == 0:
+            print('im_detect: {:d}/{:d} {:.3f}s {:.3f}s'
+                  .format(i + 1, num_images, detect_time, nms_time))
+            _t['im_detect'].clear()
+            _t['misc'].clear()
+
+    with open(det_file, 'wb') as f:
+        pickle.dump(all_boxes, f, pickle.HIGHEST_PROTOCOL)
+
+    print('Evaluating detections')
+    if args.dataset == 'VOC':
+        APs, mAP = testset.evaluate_detections(all_boxes, save_folder)
+        return APs, mAP
+    else:
+        testset.evaluate_detections(all_boxes, save_folder)
+
 
 
 class Detector(object):
@@ -235,6 +304,7 @@ class Detector(object):
                 if args.visdom and args.send_images_to_visdom:
                     random_batch_index = np.random.randint(images.size(0))
                     viz.image(images.data[random_batch_index].cpu().numpy())
+            break
         # torch.save(net.state_dict(), os.path.join(save_folder,
         #                                           'Final_' + args.version + '_' + args.dataset + '.pth'))
 
@@ -253,53 +323,27 @@ class Detector(object):
 
 
     def test(self,epoch):
+        net=self.model_details.model
+        net.eval()
+        rgb_std = (1, 1, 1)
         print('\n ==> Test started ')
-        num_classes = len(labelmap) + 1  # +1 for background
-        model = build_ssd('test', 300, num_classes)  # initialize SSD
-        model.load_state_dict(torch.load(args.trained_model))
-        model.eval()
-        print('Finished loading model!')
-        # load data
-        dataset = VOCDetection(VOC_ROOT, [('2007', set_type)],
-                               BaseTransform(300, dataset_mean),
-                               VOCAnnotationTransform())
+        args=self.model_details.args
+        top_k = (300, 200)[args.dataset == 'COCO']
+        save_folder = os.path.join(args.save_folder, args.version + '_' + str(args.size), args.date)
+        if not os.path.exists(save_folder):
+            os.makedirs(save_folder)
+        test_save_dir = os.path.join(save_folder, 'ss_predict')
+        if not os.path.exists(test_save_dir):
+            os.makedirs(test_save_dir)
+        if 'vgg' in args.version:
+            rgb_means = (104, 117, 123)
+        elif 'mobile' in args.version:
+            rgb_means = (103.94, 116.78, 123.68)
+        testset, detector=self.testloader
+        APs, mAP = test_net(test_save_dir, net, detector, args.cuda,testset ,
+                            BaseTransform(args.size, rgb_means, rgb_std, (2, 0, 1)),
+                            top_k, thresh=0.01,model_details=self.model_details)
+        APs = [str(num) for num in APs]
+        mAP = str(mAP)
 
-        mAP=test_net(args.save_folder, model, args.cuda, dataset,
-                 BaseTransform(model.size, dataset_mean), args.top_k, 300,
-                 thresh=args.confidence_threshold)
-
-        # Save checkpoint.
-        self.writer.add_scalar('mAP', mAP, epoch)
-        # self.writer.add_scalar('test loss', test_loss, epoch)
-
-
-        print("MAP:{}".format(mAP))
-        if mAP > self.best_map:
-            self.save_model(mAP, epoch)
-            self.best_map = mAP
-
-class Timer(object):
-    """A simple timer."""
-
-    def __init__(self):
-        self.total_time = 0.
-        self.calls = 0
-        self.start_time = 0.
-        self.diff = 0.
-        self.average_time = 0.
-
-    def tic(self):
-        # using time.time instead of time.clock because time time.clock
-        # does not normalize for multithreading
-        self.start_time = time.time()
-
-    def toc(self, average=True):
-        self.diff = time.time() - self.start_time
-        self.total_time += self.diff
-        self.calls += 1
-        self.average_time = self.total_time / self.calls
-        if average:
-            return self.average_time
-        else:
-            return self.diff
 
