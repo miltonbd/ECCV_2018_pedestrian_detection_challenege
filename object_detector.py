@@ -237,7 +237,8 @@ class Detector(object):
 
         for batch_idx, (images, targets) in enumerate(self.trainloader):
             iteration = epoch * len(self.trainloader) + batch_idx
-
+            if batch_idx>100:
+                break
             load_t0 = time.time()
             if iteration in stepvalues:
                 step_index = stepvalues.index(iteration) + 1
