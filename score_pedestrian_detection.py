@@ -211,22 +211,25 @@ def wider_ped_eval(input, gt,ignore_file):
     return mAP
 
 
-if __name__ == '__main__':
-    # parser = argparse.ArgumentParser()
-    # parser.add_argument("input", type=str, default='./')
-    # parser.add_argument("output", type=str, default='./')
-    # args = parser.parse_args()
+def eval():
     input_dir = './'
     output_dir = './'
-
     ref_dir = osp.join(input_dir, 'ref')
     submit_dir = osp.join(input_dir, 'res')
     submit_file = osp.join(submit_dir, os.listdir(submit_dir)[0])
     gt_file = osp.join(ref_dir, 'label.txt')
     ignore_file = osp.join(ref_dir, 'ignore_part.txt')
-    
     check_size(submit_file)
-    mAP = wider_ped_eval(submit_file, gt_file,ignore_file)
+    mAP = wider_ped_eval(submit_file, gt_file, ignore_file)
     out = {'Average AP': mAP}
     strings = ['{}: {}\n'.format(k, v) for k, v in out.items()]
-    open(os.path.join(output_dir, 'scores.txt'), 'w').writelines(strings)
+    open(os.path.join(output_dir, 'scores_out.txt'), 'w').writelines(strings)
+    return mAP
+
+
+if __name__ == '__main__':
+    # parser = argparse.ArgumentParser()
+    # parser.add_argument("input", type=str, default='./')
+    # parser.add_argument("output", type=str, default='./')
+    # args = parser.parse_args()
+    eval()

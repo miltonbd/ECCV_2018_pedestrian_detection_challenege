@@ -8,6 +8,15 @@ import os
 face=[[x1,x2,x2,y2]]
 """
 
+
+def draw_rectangle_w_h_box(img_path, faces, save_dir='./detected_face'):
+    create_dir_if_not_exists(save_dir)
+    img_face_detect = cv2.imread(img_path)
+    for face in faces:
+        x1, y1, x2, y2 = face
+        cv2.rectangle(img_face_detect, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 0), 1)
+        cv2.imwrite(os.path.join(save_dir, os.path.basename(img_path)), img_face_detect)
+
 def draw_rectangle(img_path, faces, save_dir='./detected_face'):
     create_dir_if_not_exists(save_dir)
     img_face_detect = cv2.imread(img_path)

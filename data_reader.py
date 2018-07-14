@@ -181,6 +181,26 @@ def get_voc_reader(args):
 
     return (trainloader, (testset,detector))
 
+class TestDatasetReader(Dataset):
+    """
+    """
+    def __init__(self, data):
+        self.data=np.asarray(data)
+        self.transform_test_image = transforms.Compose([
+            # transforms.Resize([224, 224]),
+            transforms.ToTensor()]);
+
+    def __getitem__(self, index):
+        img_path=self.data[index]
+        if not os.path.exists(img_path):
+            print("{} image not found".format(img_path))
+            exit(0);
+        img = Image.open(img_path)
+        data = self.transform_test_image(img)
+        return data
+
+    def __len__(self):
+        return len(self.data)
 
 def test():
     trainloader, valloader = get_data_loader(100)
@@ -206,6 +226,12 @@ def get_ignore_parts_for_train():
             annotations[file_name].append([ left, top, w, h])
     return annotations
 
+def get_test_loader_for_upload(batch_size):
+    test_files=glob.glob("/media/milton/ssd1/research/competitions/data_wider_pedestrian/test_new/test_new/**.jpg")
+    test_data_set = TestDatasetReader(test_files)
+    testloader = torch.utils.data.DataLoader(test_data_set, batch_size=batch_size, shuffle=False,
+                                              num_workers=2)
+    return test_files
 
 if __name__ == '__main__':
     read_train_gt()

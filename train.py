@@ -76,6 +76,9 @@ def main(args=None):
 		dataset_val = CocoDataset(parser.coco_path, set_name='val_wider_pedestrian',
 								  transform=transforms.Compose([Normalizer(), Resizer()]))
 
+		# dataset_test = CocoDataset(parser.coco_path, set_name='test_wider_pedestrian',
+		# 						  transform=transforms.Compose([Normalizer()]))
+
 	elif parser.dataset == 'csv':
 
 		if parser.csv_train is None:
@@ -197,19 +200,21 @@ def main(args=None):
 				progress_bar(iter_num,iter_per_epoch,msg)
 				# print('Epoch: {} | Iteration: {} | Classification loss: {:1.5f} | Regression loss: {:1.5f} | Running loss: {:1.5f}'.format(epoch_num, iter_num, float(classification_loss), float(regression_loss), np.mean(loss_hist)))
 				# break
-				# if iter_num>100:
-				# 	break
+				if iter_num>20:
+				 	break
 			except Exception as e:
 				print(e)
 		
 		
 		if parser.dataset == 'coco':
 			print('\n==>Evaluating dataset')
-
-			coco_eval.evaluate_coco(dataset_val, retinanet)
+			coco_eval.evaluate_coco(dataset_val, retinanet, threshold=0.05)
 
 		elif parser.dataset == 'wider_pedestrain':
-			coco_eval.evaluate_wider_pedestrian(dataset_val, retinanet)
+			from data_reader import get_test_loader_for_upload
+			test_data=get_test_loader_for_upload(1)
+			coco_eval.evaluate_wider_pedestrian_for_upload(test_data, retinanet)
+			retinanet.train()
 
 		elif parser.dataset == 'csv' and parser.csv_val is not None:
 			print('Evaluating dataset')
