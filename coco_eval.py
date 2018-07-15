@@ -94,12 +94,17 @@ def evaluate_wider_pedestrian_for_upload(epoch,dataset, model, threshold=0.3):
         return
 
 import copy
-def evaluate_wider_pedestrian(epoch, dataset, model, threshold=0.3):
+def evaluate_wider_pedestrian(epoch, dataset, model_new,retinanet_sk, threshold=0.3):
     print("\n==> Evaluating wider pedestrian dataset.")
-    model1=copy.deepcopy(model.cpu()).cuda(0)
-    # model2=copy.deepcopy(model.cpu()).cuda(1)
+
+    new_model_1 = model_new._modules['module']
+    state_dict_new = new_model_1.state_dict()
+    retinanet_sk.load_state_dict(state_dict_new)
+    model1=copy.deepcopy(retinanet_sk).cuda(0)
+    model2=copy.deepcopy(retinanet_sk).cuda(1)
 
     model1.eval()
+    model2.eval()
 
     with torch.no_grad():
 

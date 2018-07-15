@@ -156,6 +156,7 @@ def main(args=None):
 	use_gpu = True
 
 	if use_gpu:
+		retinanet_sk=copy.deepcopy(retinanet.cpu()) # will hold the raw model, later it will be loaded with new model weight to test in seperate gpus.
 		retinanet = retinanet.cuda()
 		retinanet = torch.nn.DataParallel(retinanet)
 
@@ -231,7 +232,7 @@ def main(args=None):
 		elif parser.dataset == 'wider_pedestrain':
 			retinanet.eval()
 			test_data=get_test_loader_for_upload(1)
-			new_map=coco_eval.evaluate_wider_pedestrian(epoch_num, dataset_val, retinanet) # to validate
+			new_map=coco_eval.evaluate_wider_pedestrian(epoch_num, dataset_val, retinanet,retinanet_sk) # to validate
 			# print("\nepoch:{}, validation average precision score:{}".format(epoch_num, new_map))
 
 			scheduler.step(np.mean(epoch_loss))
