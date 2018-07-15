@@ -100,9 +100,11 @@ def main(args=None):
 		raise ValueError('Dataset type not understood (must be csv or coco), exiting.')
 	batch_size=6
 	num_classes=1
+	print("Total Train:{}".format(len(dataset_train)))
 	sampler = AspectRatioBasedSampler(dataset_train, batch_size=batch_size, drop_last=False)
 	dataloader_train = DataLoader(dataset_train, num_workers=4, collate_fn=collater, batch_sampler=sampler)
 
+	print("Total Validation:{}".format(len(dataset_val)))
 	if dataset_val is not None:
 		sampler_val = AspectRatioBasedSampler(dataset_val, batch_size=batch_size, drop_last=False)
 		dataloader_val = DataLoader(dataset_val, num_workers=1, collate_fn=collater, batch_sampler=sampler_val)
@@ -196,12 +198,12 @@ def main(args=None):
 				writer.add_scalar('Regression loss',regression_loss,step)
 				writer.add_scalar("Running Loss",np.mean(loss_hist),step)
 
-				msg='Classification loss: {:1.5f} | Regression loss: {:1.5f} | Running loss: {:1.5f}'.format(float(classification_loss), float(regression_loss), np.mean(loss_hist))
+				msg='Epoch:{}, Classification loss: {:1.5f} | Regression loss: {:1.5f} | Running loss: {:1.5f}'.format(epoch_num, float(classification_loss), float(regression_loss), np.mean(loss_hist))
 				progress_bar(iter_num,iter_per_epoch,msg)
 				# print('Epoch: {} | Iteration: {} | Classification loss: {:1.5f} | Regression loss: {:1.5f} | Running loss: {:1.5f}'.format(epoch_num, iter_num, float(classification_loss), float(regression_loss), np.mean(loss_hist)))
 				# break
-				# if iter_num>200:
-				# 	break
+				if iter_num>50:
+					break
 			except Exception as e:
 				print(e)
 		
@@ -213,8 +215,8 @@ def main(args=None):
 		elif parser.dataset == 'wider_pedestrain':
 			from data_reader import get_test_loader_for_upload
 			test_data=get_test_loader_for_upload(1)
-			test_score=coco_eval.evaluate_wider_pedestrian_for_upload(epoch_num, test_data, retinanet)
-			print("test score:{}".format(test_score))
+			validation_score=coco_eval.evaluate_wider_pedestrian(epoch_num, dataset_val, retinanet)
+			print("epoch:{}, test score:{}".format(epoch_num, validation_score))
 			retinanet.train()
 
 		elif parser.dataset == 'csv' and parser.csv_val is not None:

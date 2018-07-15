@@ -88,10 +88,11 @@ def convert_wider_pedestrian_to_pascal():
             os.makedirs(voc_anno_train_dir)
         anno_path = os.path.join(voc_anno_train_dir, xml_file_name)
         write_pascal_annotation(image_path, obj_list, anno_path)
+        testids.append(image_name.split('.')[0])
 
         # break
     with open('/media/milton/ssd1/research/competitions/data_wider_pedestrian/VOC_Wider_pedestrian/ImageSets/Main/test.txt', mode='wt', encoding='utf-8') as myfile:
-        myfile.write('\n'.join(trainvalids))
+        myfile.write('\n'.join(testids))
 
 
 

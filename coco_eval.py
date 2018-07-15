@@ -81,8 +81,7 @@ def evaluate_wider_pedestrian_for_upload(epoch,dataset, model, threshold=0.3):
         save_to_file('res/scores.txt', scores_for_upload)
         # import shutil
         # shutil.make_archive('res/scores.txt', 'zip', 'res')
-        from score_pedestrian_detection import eval
-        test_score=eval()
+
         import zipfile
         archive = zipfile.ZipFile("submit_files/score_{}_{}.zip".format(epoch,test_score), "w")
         try:
@@ -92,10 +91,10 @@ def evaluate_wider_pedestrian_for_upload(epoch,dataset, model, threshold=0.3):
             print('Reading files now.')
             archive.close()
         model.train()
-        return test_score
+        return
 
 
-def evaluate_wider_pedestrian(dataset, model, threshold=0.3):
+def evaluate_wider_pedestrian(epoch, dataset, model, threshold=0.3):
     print("\n==> Evaluating wider pedestrian dataset.")
     model.eval()
 
@@ -153,11 +152,9 @@ def evaluate_wider_pedestrian(dataset, model, threshold=0.3):
             # append image to list of processed images
             image_ids.append(dataset.image_ids[index])
         from file_utils import save_to_file
-        save_to_file('res/scores.txt',scores_for_upload)
-        import shutil
-        # shutil.make_archive(output_filename, 'zip', dir_name)
+        save_to_file('submit_files/scores_validation.txt',scores_for_upload)
 
-            # print progress
+        # print progress
 
         if not len(results):
             return
@@ -176,10 +173,11 @@ def evaluate_wider_pedestrian(dataset, model, threshold=0.3):
         coco_eval.evaluate()
         coco_eval.accumulate()
         summary=coco_eval.summarize()
-
+        from multi_thread_score_pedestrian_detection import eval
+        validation_score = eval()
         model.train()
 
-        return
+        return validation_score
 
 def evaluate_coco(dataset, model, threshold=0.05):
     

@@ -2,6 +2,8 @@ import numpy as np
 import os
 import argparse
 import os.path as osp
+from utils.utils import progress_bar
+import time
 
 def check_size(submission_file):
     max_size = 60*1024*1024
@@ -138,7 +140,7 @@ def compute_ap(rec, prec):
     return ap
 
 
-def pedestrian_eval(input, gt_file, ignore_file, ovthresh):
+def pedestrian_eval(aap,input, gt_file, ignore_file, ovthresh):
     gt = parse_gt_annotation(gt_file,ignore_file)
     image_ids, BB = parse_submission(input,ignore_file)
     npos = 0
@@ -183,38 +185,50 @@ def pedestrian_eval(input, gt_file, ignore_file, ovthresh):
             fp[d] = 1.
     fp = np.cumsum(fp)
     tp = np.cumsum(tp)
-    rec = tp / float(npos+1e-8)
+    rec = tp / float(npos)
     prec = tp / np.maximum(tp + fp, np.finfo(np.float64).eps)
     ap = compute_ap(rec, prec)
+    aap.append(ap)
     return ap
 
-
+import threading
 def wider_ped_eval(input, gt,ignore_file):
     aap = []
+    threads=[]
     for ove in np.arange(0.5, 1.0, 0.05):
-        ap = pedestrian_eval(input, gt,ignore_file, ovthresh=ove)
-        aap.append(ap)
+        # pedestrian_eval(aap, input, gt,ignore_file, ovthresh=ove)
+        t=threading.Thread(target=pedestrian_eval, args=(aap,input,gt,ignore_file),kwargs={'ovthresh':ove})
+        threads.append(t)
+        t.start()
+        time.sleep(5)
+
+    print("Total threads:{}".format(len(threads)))
+    for index,t in enumerate(threads):
+        progress_bar(index, len(threads)," executing.")
+        t.join()
     mAP = np.average(aap)
     return mAP
 
 
-if __name__ == '__main__':
-    # parser = argparse.ArgumentParser()
-    # parser.add_argument("input", type=str)
-    # parser.add_argument("output", type=str)
-    # args = parser.parse_args()
+def eval():
     input_dir = './'
     output_dir = './'
-
     ref_dir = osp.join(input_dir, 'ref')
     submit_dir = osp.join(input_dir, 'res')
     submit_file = osp.join(submit_dir, os.listdir(submit_dir)[0])
     gt_file = osp.join(ref_dir, 'label.txt')
     ignore_file = osp.join(ref_dir, 'ignore_part.txt')
-    
     check_size(submit_file)
-    mAP = wider_ped_eval(submit_file, gt_file,ignore_file)
+    mAP = wider_ped_eval(submit_file, gt_file, ignore_file)
     out = {'Average AP': mAP}
-    print(out)
-    # strings = ['{}: {}\n'.format(k, v) for k, v in out.items()]
-    # open(os.path.join(output_dir, 'scores.txt'), 'w').writelines(strings)
+    strings = ['{}: {}\n'.format(k, v) for k, v in out.items()]
+    open(os.path.join(output_dir, 'scores_out.txt'), 'w').writelines(strings)
+    return mAP
+
+
+if __name__ == '__main__':
+    # parser = argparse.ArgumentParser()
+    # parser.add_argument("input", type=str, default='./')
+    # parser.add_argument("output", type=str, default='./')
+    # args = parser.parse_args()
+    eval()
