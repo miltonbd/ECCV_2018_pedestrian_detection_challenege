@@ -9,6 +9,7 @@ import threading
 """
 5Dtensor
 todo save some random tensor.
+generate augmentation data in pascal voc format and later append them in mscoco files in training.
 """
 
 aug_save_dir="/media/milton/ssd1/research/competitions/EmotiW_2018/Train_aug"

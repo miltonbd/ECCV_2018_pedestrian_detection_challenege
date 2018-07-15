@@ -93,10 +93,13 @@ def evaluate_wider_pedestrian_for_upload(epoch,dataset, model, threshold=0.3):
         model.train()
         return
 
-
+import copy
 def evaluate_wider_pedestrian(epoch, dataset, model, threshold=0.3):
     print("\n==> Evaluating wider pedestrian dataset.")
-    model.eval()
+    model1=copy.deepcopy(model.cpu()).cuda(0)
+    # model2=copy.deepcopy(model.cpu()).cuda(1)
+
+    model1.eval()
 
     with torch.no_grad():
 
@@ -110,7 +113,8 @@ def evaluate_wider_pedestrian(epoch, dataset, model, threshold=0.3):
             progress_bar(index, len(dataset), "Evaluating........")
 
             # run network
-            scores, labels, boxes = model(data['img'].permute(2, 0, 1).cuda().float().unsqueeze(dim=0))
+            data1 = data['img'].permute(2, 0, 1).cuda(0)
+            scores, labels, boxes = model1(data1.float().unsqueeze(dim=0))
             scores = scores.cpu()
             labels = labels.cpu()
             boxes = boxes.cpu()

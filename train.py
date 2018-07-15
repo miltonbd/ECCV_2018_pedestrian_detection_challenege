@@ -1,7 +1,7 @@
 import os
-gpu=1
-os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu)
+# gpu=1
+# os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+# os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu)
 import copy
 import argparse
 import pdb
@@ -111,7 +111,7 @@ def main(args=None):
 
 	else:
 		raise ValueError('Dataset type not understood (must be csv or coco), exiting.')
-	batch_size=4
+	batch_size=12
 	num_classes=1
 	print("Total Train:{}".format(len(dataset_train)))
 	sampler = AspectRatioBasedSampler(dataset_train, batch_size=batch_size, drop_last=False)
@@ -218,8 +218,8 @@ def main(args=None):
 				progress_bar(iter_num,iter_per_epoch,msg)
 				# print('Epoch: {} | Iteration: {} | Classification loss: {:1.5f} | Regression loss: {:1.5f} | Running loss: {:1.5f}'.format(epoch_num, iter_num, float(classification_loss), float(regression_loss), np.mean(loss_hist)))
 				# break
-				# if iter_num>20:
-				# 	break
+				if iter_num>20:
+					break
 			except Exception as e:
 				print(e)
 		
