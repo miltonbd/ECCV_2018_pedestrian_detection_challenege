@@ -174,9 +174,9 @@ def evaluate_wider_pedestrian(epoch, dataset, model, threshold=0.3):
         coco_eval.accumulate()
         summary=coco_eval.summarize()
         validation_score=-1
-        # from multi_thread_score_pedestrian_detection import eval
-        # validation_score = eval()
-        return validation_score
+        from score_pedestrian_detection import get_average_precision_validation
+
+        return get_average_precision_validation()
 
 def evaluate_coco(dataset, model, threshold=0.05):
     

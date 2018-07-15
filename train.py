@@ -8,7 +8,6 @@ import pdb
 import collections
 import sys
 import numpy as np
-
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -23,9 +22,7 @@ import losses
 from dataloader import CocoDataset, CSVDataset, collater, Resizer, AspectRatioBasedSampler, Augmenter, UnNormalizer, Normalizer
 from torch.utils.data import Dataset, DataLoader
 from data_reader_pedestrian import get_test_loader_for_upload
-
 import coco_eval
-
 assert torch.__version__.split('.')[1] == '4'
 from tensorboardX import SummaryWriter
 log_dir='logs'
@@ -49,8 +46,25 @@ def freeze_bn(net):
 
 def main(args=None):
 
-	parser     = argparse.ArgumentParser(description='Simple training script for training a RetinaNet network.')
+	"""
+	todo s:
+		################## ToDo ########################
+		1. download more images using image_utils and isic-arhive. Also, use more online resources for data.
+		2.
+		3. use pair augmentation, random erase
+		4. download more images for each classes.
+		5. preprocessing and feature extraction
+		6. bigger 500 px image size. big image tends to make
+		7. use ResNet-152 for better peromance.
+		8. adversarial training, use crosssentropy, focal loss
+		9. use similar optimizatio adam and learning rate schedule like wider face pedestrian dataset.
+		10.BGR to RGB
+		11. multi scale testing.
+		12. soft nms
+		13. save model and load from previous epoch
+	"""
 
+	parser     = argparse.ArgumentParser(description='Simple training script for training a RetinaNet network.')
 	parser.add_argument('--dataset', default="wider_pedestrain", help='Dataset type, must be one of csv or coco.')
 	parser.add_argument('--coco_path', default="/media/milton/ssd1/research/competitions/data_wider_pedestrian/", help='Path to COCO directory')
 	parser.add_argument('--csv_train', help='Path to file containing training annotations (see readme)')
@@ -88,9 +102,7 @@ def main(args=None):
 		if parser.csv_classes is None:
 			raise ValueError('Must provide --csv_classes when training on COCO,')
 
-
 		dataset_train = CSVDataset(train_file=parser.csv_train, class_list=parser.csv_classes, transform=transforms.Compose([Normalizer(), Augmenter(), Resizer()]))
-
 		if parser.csv_val is None:
 			dataset_val = None
 			print('No validation annotations provided.')
@@ -110,16 +122,19 @@ def main(args=None):
 		sampler_val = AspectRatioBasedSampler(dataset_val, batch_size=batch_size, drop_last=False)
 		dataloader_val = DataLoader(dataset_val, num_workers=1, collate_fn=collater, batch_sampler=sampler_val)
 	best_saved_model_name = "checkpoint/resnet{}_{}_best_model.pth".format(parser.depth, parser.dataset)
-	mAP=0
+	best_mAP=0
+	start_epoch=0;
 	try:
 		print("Loading model and optimizer from checkpoint '{}'".format(best_saved_model_name))
 		checkpoint = torch.load(best_saved_model_name)
-		model.load_state_dict(checkpoint['model_state'])
+		model.load_state_dict(checkpoint['model'])
+		best_mAP=checkpoint['map']
+		start_epoch=checkpoint['epoch']
 		# optimizer.load_state_dict(checkpoint['optimizer_state'])
 		print("Loaded checkpoint '{}' (epoch {})"
 			  .format(args.resume, checkpoint['epoch']))
 		start_epoch = checkpoint['epoch']
-		print('==> Resuming from checkpoint from epoch {} with mAP {}..'.format(start_epoch, mAP))
+		print('==> Resuming Sucessfully from checkpoint from epoch {} with mAP {}..'.format(start_epoch, best_mAP))
 
 	except Exception as e:
 		print("\nExcpetion: {}".format(repr(e)))
@@ -159,7 +174,7 @@ def main(args=None):
 
 	print('Num training images: {}'.format(len(dataset_train)))
 
-	for epoch_num in range(parser.epochs):
+	for epoch_num in range(start_epoch,parser.epochs):
 
 		retinanet.train()
 		freeze_bn(retinanet)
@@ -203,8 +218,8 @@ def main(args=None):
 				progress_bar(iter_num,iter_per_epoch,msg)
 				# print('Epoch: {} | Iteration: {} | Classification loss: {:1.5f} | Regression loss: {:1.5f} | Running loss: {:1.5f}'.format(epoch_num, iter_num, float(classification_loss), float(regression_loss), np.mean(loss_hist)))
 				# break
-				if iter_num>20:
-					break
+				# if iter_num>20:
+				# 	break
 			except Exception as e:
 				print(e)
 		
@@ -214,18 +229,32 @@ def main(args=None):
 			coco_eval.evaluate_coco(dataset_val, retinanet, threshold=0.05)
 
 		elif parser.dataset == 'wider_pedestrain':
-			pass
+			retinanet.eval()
 			test_data=get_test_loader_for_upload(1)
-			validation_score=coco_eval.evaluate_wider_pedestrian(epoch_num, dataset_val, retinanet)
-			print("epoch:{}, test score:{}".format(epoch_num, validation_score))
+			new_map=coco_eval.evaluate_wider_pedestrian(epoch_num, dataset_val, retinanet) # to validate
+			# print("\nepoch:{}, validation average precision score:{}".format(epoch_num, new_map))
 
-		scheduler.step(np.mean(epoch_loss))	
+			scheduler.step(np.mean(epoch_loss))
+			epoch_saved_model_name = "checkpoint/resnet{}_{}_epoch_{}.pth".format(parser.depth, parser.dataset, epoch_num)
+			save_model(model,epoch_saved_model_name,new_map,epoch_num)
+			if new_map>best_mAP:
+				print("Found new best model with mAP:{}, over {}".format(new_map, best_mAP))
+				save_model(model,best_saved_model_name,new_map,epoch_num)
+				best_mAP=new_map
+			retinanet.train()
 
-		torch.save(retinanet, 'checkpoint/{}_retinanet_{}.pt'.format(parser.dataset, epoch_num))
+# torch.save(retinanet, '1_'.format(epoch_num,best_saved_model_name))
 
-	retinanet.eval()
-
-	# torch.save(retinanet, '1_'.format(epoch_num,best_saved_model_name))
+def save_model(model,best_saved_model_name, mAP, epoch):
+	print('\n Saving model with mAP {} in {}'.format(mAP, best_saved_model_name))
+	state = {
+		'model': model,
+		'map': mAP, # mAP on validation set.
+		'epoch': epoch,
+	}
+	if not os.path.isdir('checkpoint'):
+		os.mkdir('checkpoint')
+	torch.save(state, best_saved_model_name)
 
 if __name__ == '__main__':
  main()
