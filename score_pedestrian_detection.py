@@ -156,7 +156,6 @@ def pedestrian_eval(aap,input, gt_file, ignore_file, ovthresh):
         if image_ids[d] not in recs.keys():
             raise KeyError("Can not find image {} in the groundtruth file, did you submit the result file for the right dataset?".format(image_ids[d]))
     for d in range(nd):
-        progress_bar("1",d)
         R = recs[image_ids[d]]
         bb = BB[d, :].astype(float)
         ovmax = -np.inf

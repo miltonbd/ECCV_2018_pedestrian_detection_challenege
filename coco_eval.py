@@ -13,7 +13,7 @@ from torchvision import transforms
 from dataloader import Normalizer, Resizer
 from torchvision.transforms import ToTensor
 import  skimage
-def evaluate_wider_pedestrian_for_upload(dataset, model, threshold=0.3):
+def evaluate_wider_pedestrian_for_upload(epoch,dataset, model, threshold=0.3):
     print("\n==> Testing wider pedestrian dataset.")
     model.eval()
 
@@ -79,10 +79,19 @@ def evaluate_wider_pedestrian_for_upload(dataset, model, threshold=0.3):
             # append image to list of processed images
         from file_utils import save_to_file
         save_to_file('res/scores.txt', scores_for_upload)
-        import shutil
-        shutil.make_archive('res/scores.txt', 'zip', 'res')
+        # import shutil
+        # shutil.make_archive('res/scores.txt', 'zip', 'res')
         from score_pedestrian_detection import eval
         test_score=eval()
+        import zipfile
+        archive = zipfile.ZipFile("submit_files/score_{}_{}.zip".format(epoch,test_score), "w")
+        try:
+            archive.write('res/scores.txt')
+            print('Files added.')
+        finally:
+            print('Reading files now.')
+            archive.close()
+        model.train()
         return test_score
 
 

@@ -200,8 +200,8 @@ def main(args=None):
 				progress_bar(iter_num,iter_per_epoch,msg)
 				# print('Epoch: {} | Iteration: {} | Classification loss: {:1.5f} | Regression loss: {:1.5f} | Running loss: {:1.5f}'.format(epoch_num, iter_num, float(classification_loss), float(regression_loss), np.mean(loss_hist)))
 				# break
-				if iter_num>20:
-				 	break
+				# if iter_num>200:
+				# 	break
 			except Exception as e:
 				print(e)
 		
@@ -213,7 +213,8 @@ def main(args=None):
 		elif parser.dataset == 'wider_pedestrain':
 			from data_reader import get_test_loader_for_upload
 			test_data=get_test_loader_for_upload(1)
-			coco_eval.evaluate_wider_pedestrian_for_upload(test_data, retinanet)
+			test_score=coco_eval.evaluate_wider_pedestrian_for_upload(epoch_num, test_data, retinanet)
+			print("test score:{}".format(test_score))
 			retinanet.train()
 
 		elif parser.dataset == 'csv' and parser.csv_val is not None:
