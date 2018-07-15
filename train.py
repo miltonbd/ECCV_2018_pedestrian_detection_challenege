@@ -22,6 +22,7 @@ from anchors import Anchors
 import losses
 from dataloader import CocoDataset, CSVDataset, collater, Resizer, AspectRatioBasedSampler, Augmenter, UnNormalizer, Normalizer
 from torch.utils.data import Dataset, DataLoader
+from data_reader_pedestrian import get_test_loader_for_upload
 
 import coco_eval
 
@@ -98,7 +99,7 @@ def main(args=None):
 
 	else:
 		raise ValueError('Dataset type not understood (must be csv or coco), exiting.')
-	batch_size=6
+	batch_size=4
 	num_classes=1
 	print("Total Train:{}".format(len(dataset_train)))
 	sampler = AspectRatioBasedSampler(dataset_train, batch_size=batch_size, drop_last=False)
@@ -202,7 +203,7 @@ def main(args=None):
 				progress_bar(iter_num,iter_per_epoch,msg)
 				# print('Epoch: {} | Iteration: {} | Classification loss: {:1.5f} | Regression loss: {:1.5f} | Running loss: {:1.5f}'.format(epoch_num, iter_num, float(classification_loss), float(regression_loss), np.mean(loss_hist)))
 				# break
-				if iter_num>50:
+				if iter_num>20:
 					break
 			except Exception as e:
 				print(e)
@@ -213,47 +214,18 @@ def main(args=None):
 			coco_eval.evaluate_coco(dataset_val, retinanet, threshold=0.05)
 
 		elif parser.dataset == 'wider_pedestrain':
-			from data_reader import get_test_loader_for_upload
+			pass
 			test_data=get_test_loader_for_upload(1)
 			validation_score=coco_eval.evaluate_wider_pedestrian(epoch_num, dataset_val, retinanet)
 			print("epoch:{}, test score:{}".format(epoch_num, validation_score))
-			retinanet.train()
 
-		elif parser.dataset == 'csv' and parser.csv_val is not None:
-			print('Evaluating dataset')
-
-			total_loss_joint = 0.0
-			total_loss_classification = 0.0
-			total_loss_regression = 0.0
-
-			for iter_num, data in enumerate(dataloader_val):
-
-				if iter_num % 100 == 0:
-					print('{}/{}'.format(iter_num, len(dataset_val)))
-
-				with torch.no_grad():			
-					classification, regression, anchors = retinanet(data['img'].cuda().float())
-					
-					classification_loss, regression_loss = total_loss(classification, regression, anchors, data['annot'])
-
-					total_loss_joint += float(classification_loss + regression_loss)
-					total_loss_regression += float(regression_loss)
-					total_loss_classification += float(classification_loss)
-
-			total_loss_joint /= float(len(dataset_val))
-			total_loss_classification /= float(len(dataset_val))
-			total_loss_regression /= float(len(dataset_val))
-
-			print('Validation epoch: {} | Classification loss: {:1.5f} | Regression loss: {:1.5f} | Total loss: {:1.5f}'.format(epoch_num, float(total_loss_classification), float(total_loss_regression), float(total_loss_joint)))
-		
-		
 		scheduler.step(np.mean(epoch_loss))	
 
-		torch.save(retinanet, '{}_retinanet_{}.pt'.format(parser.dataset, epoch_num))
+		torch.save(retinanet, 'checkpoint/{}_retinanet_{}.pt'.format(parser.dataset, epoch_num))
 
 	retinanet.eval()
 
-	torch.save(retinanet, '1_'.format(epoch_num,best_saved_model_name))
+	# torch.save(retinanet, '1_'.format(epoch_num,best_saved_model_name))
 
 if __name__ == '__main__':
  main()
