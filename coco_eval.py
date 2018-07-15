@@ -96,15 +96,12 @@ def evaluate_wider_pedestrian_for_upload(epoch,dataset, model, threshold=0.3):
 import copy
 def evaluate_wider_pedestrian(epoch, dataset, model_new,retinanet_sk, threshold=0.3):
     print("\n==> Evaluating wider pedestrian dataset.")
-
     new_model_1 = model_new._modules['module']
     state_dict_new = new_model_1.state_dict()
     retinanet_sk.load_state_dict(state_dict_new)
     model1=copy.deepcopy(retinanet_sk).cuda(0)
-    model2=copy.deepcopy(retinanet_sk).cuda(1)
 
     model1.eval()
-    model2.eval()
 
     with torch.no_grad():
 
@@ -113,6 +110,8 @@ def evaluate_wider_pedestrian(epoch, dataset, model_new,retinanet_sk, threshold=
         image_ids = []
         scores_for_upload=[]
         for index in range(len(dataset)):
+            # if index>50:
+            #     break
             data = dataset[index]
             scale = data['scale']
             progress_bar(index, len(dataset), "Evaluating........")
@@ -162,9 +161,7 @@ def evaluate_wider_pedestrian(epoch, dataset, model_new,retinanet_sk, threshold=
             image_ids.append(dataset.image_ids[index])
         from file_utils import save_to_file
         save_to_file('submit_files/scores_validation.txt',scores_for_upload)
-
         # print progress
-
         if not len(results):
             return
 

@@ -124,35 +124,20 @@ def main(args=None):
 	best_saved_model_name = "checkpoint/resnet{}_{}_best_model.pth".format(parser.depth, parser.dataset)
 	best_mAP=0
 	start_epoch=0;
-	try:
-		print("Loading model and optimizer from checkpoint '{}'".format(best_saved_model_name))
-		checkpoint = torch.load(best_saved_model_name)
-		model.load_state_dict(checkpoint['model'])
-		best_mAP=checkpoint['map']
-		start_epoch=checkpoint['epoch']
-		# optimizer.load_state_dict(checkpoint['optimizer_state'])
-		print("Loaded checkpoint '{}' (epoch {})"
-			  .format(args.resume, checkpoint['epoch']))
-		start_epoch = checkpoint['epoch']
-		print('==> Resuming Sucessfully from checkpoint from epoch {} with mAP {}..'.format(start_epoch, best_mAP))
 
-	except Exception as e:
-		print("\nExcpetion: {}".format(repr(e)))
-		print('\n==> Resume Failed and Building model..')
-		# Create the model
-		if parser.depth == 18:
-			retinanet = model.resnet18(num_classes=num_classes, pretrained=True)
-		elif parser.depth == 34:
-			retinanet = model.resnet34(num_classes=num_classes, pretrained=True)
-		elif parser.depth == 50:
-			retinanet = model.resnet50(num_classes=num_classes, pretrained=True)
-		elif parser.depth == 101:
-			retinanet = model.resnet101(num_classes=num_classes, pretrained=True)
-		elif parser.depth == 152:
-			retinanet = model.resnet152(num_classes=num_classes, pretrained=True)
-		else:
-			raise ValueError('Unsupported model depth, must be one of 18, 34, 50, 101, 152')
-
+	# Create the model
+	if parser.depth == 18:
+		retinanet = model.resnet18(num_classes=num_classes, pretrained=True)
+	elif parser.depth == 34:
+		retinanet = model.resnet34(num_classes=num_classes, pretrained=True)
+	elif parser.depth == 50:
+		retinanet = model.resnet50(num_classes=num_classes, pretrained=True)
+	elif parser.depth == 101:
+		retinanet = model.resnet101(num_classes=num_classes, pretrained=True)
+	elif parser.depth == 152:
+		retinanet = model.resnet152(num_classes=num_classes, pretrained=True)
+	else:
+		raise ValueError('Unsupported model depth, must be one of 18, 34, 50, 101, 152')
 	use_gpu = True
 
 	if use_gpu:
@@ -160,6 +145,21 @@ def main(args=None):
 		retinanet = retinanet.cuda()
 		retinanet = torch.nn.DataParallel(retinanet)
 
+	try:
+		print("Loading model and optimizer from checkpoint '{}'".format(best_saved_model_name))
+		checkpoint = torch.load(best_saved_model_name)
+		retinanet.load_state_dict(checkpoint['model'].state_dict())
+		best_mAP=checkpoint['map']
+		start_epoch=checkpoint['epoch']
+		# optimizer.load_state_dict(checkpoint['optimizer_state'])
+		print("Loaded checkpoint '{}' (epoch {})"
+			  .format(best_saved_model_name, checkpoint['epoch']))
+		start_epoch = checkpoint['epoch']
+		print('==> Resuming Sucessfully from checkpoint from epoch {} with mAP {:.7f}..'.format(start_epoch, best_mAP))
+
+	except Exception as e:
+		print("\nExcpetion: {}".format(repr(e)))
+		print('\n==> Resume Failed...')
 	retinanet.training = True
 
 	optimizer = optim.Adam(retinanet.parameters(), lr=1e-3)
@@ -219,12 +219,11 @@ def main(args=None):
 				progress_bar(iter_num,iter_per_epoch,msg)
 				# print('Epoch: {} | Iteration: {} | Classification loss: {:1.5f} | Regression loss: {:1.5f} | Running loss: {:1.5f}'.format(epoch_num, iter_num, float(classification_loss), float(regression_loss), np.mean(loss_hist)))
 				# break
-				if iter_num>20:
-					break
+				# if iter_num>100:
+				# 	break
 			except Exception as e:
 				print(e)
-		
-		
+
 		if parser.dataset == 'coco':
 			print('\n==>Evaluating dataset')
 			coco_eval.evaluate_coco(dataset_val, retinanet, threshold=0.05)
@@ -232,24 +231,24 @@ def main(args=None):
 		elif parser.dataset == 'wider_pedestrain':
 			retinanet.eval()
 			test_data=get_test_loader_for_upload(1)
-			new_map=coco_eval.evaluate_wider_pedestrian(epoch_num, dataset_val, retinanet,retinanet_sk) # to validate
+			new_map=coco_eval.evaluate_wider_pedestrian(epoch_num, dataset_val, retinanet,retinanet_sk ) # to validate
 			# print("\nepoch:{}, validation average precision score:{}".format(epoch_num, new_map))
 
 			scheduler.step(np.mean(epoch_loss))
 			epoch_saved_model_name = "checkpoint/resnet{}_{}_epoch_{}.pth".format(parser.depth, parser.dataset, epoch_num)
-			save_model(model,epoch_saved_model_name,new_map,epoch_num)
+			save_model(retinanet,epoch_saved_model_name,new_map,epoch_num)
 			if new_map>best_mAP:
-				print("Found new best model with mAP:{}, over {}".format(new_map, best_mAP))
-				save_model(model,best_saved_model_name,new_map,epoch_num)
+				print("Found new best model with mAP:{:.7f}, over {:.7f}".format(new_map, best_mAP))
+				save_model(retinanet,best_saved_model_name,new_map,epoch_num)
 				best_mAP=new_map
 			retinanet.train()
 
 # torch.save(retinanet, '1_'.format(epoch_num,best_saved_model_name))
 
-def save_model(model,best_saved_model_name, mAP, epoch):
+def save_model(retinanet,best_saved_model_name, mAP, epoch):
 	print('\n Saving model with mAP {} in {}'.format(mAP, best_saved_model_name))
 	state = {
-		'model': model,
+		'model': retinanet,
 		'map': mAP, # mAP on validation set.
 		'epoch': epoch,
 	}
