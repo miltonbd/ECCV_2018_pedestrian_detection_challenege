@@ -233,7 +233,7 @@ def main(args=None):
 			test_data=get_test_loader_for_upload(1)
 			new_map=coco_eval.evaluate_wider_pedestrian(epoch_num, dataset_val, retinanet,retinanet_sk ) # to validate
 			# print("\nepoch:{}, validation average precision score:{}".format(epoch_num, new_map))
-
+			writer.add_scalar('validation mAP',new_map,epoch_num)
 			scheduler.step(np.mean(epoch_loss))
 			epoch_saved_model_name = "checkpoint/resnet{}_{}_epoch_{}.pth".format(parser.depth, parser.dataset, epoch_num)
 			save_model(retinanet,epoch_saved_model_name,new_map,epoch_num)
@@ -241,6 +241,7 @@ def main(args=None):
 				print("Found new best model with mAP:{:.7f}, over {:.7f}".format(new_map, best_mAP))
 				save_model(retinanet,best_saved_model_name,new_map,epoch_num)
 				best_mAP=new_map
+
 			retinanet.train()
 
 # torch.save(retinanet, '1_'.format(epoch_num,best_saved_model_name))
