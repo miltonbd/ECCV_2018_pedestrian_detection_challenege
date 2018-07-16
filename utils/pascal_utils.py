@@ -9,6 +9,7 @@ def read_pascal_annotation(anno_file):
     """
     tree = ET.parse(anno_file)
     root = tree.getroot()
+    filename=root.find('filename').text
     height=int(root.find('size/height').text)
     width=int(root.find('size/width').text)
     objs=root.findall('object')
@@ -19,8 +20,10 @@ def read_pascal_annotation(anno_file):
         xmax=int(obj.find('bndbox/xmax').text)
         ymin=int(obj.find('bndbox/ymin').text)
         ymax=int(obj.find('bndbox/ymax').text)
-        objects.append([xmin,xmax,ymin,ymax,1])
-    res={'height':height,
+        objects.append([xmin,ymin,xmax,ymax,1])
+    res={
+        'filename':filename,
+        'height':height,
          'width':width,
          'objects':objects
          }

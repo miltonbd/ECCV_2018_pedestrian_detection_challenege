@@ -3,6 +3,7 @@ from PIL import  Image
 from xml.dom import minidom
 from statics import *
 from data_reader import *
+from utils.utils import create_dir_if_not_exists
 
 def write_pascal_annotation(file_name,obj_list,xml_file):
     annotation=ET.Element('annotation')
@@ -57,6 +58,8 @@ def convert_wider_pedestrian_to_pascal():
         obj_list = row[1]
         image_name = row[0]
         annodir='/media/milton/ssd1/research/competitions/data_wider_pedestrian/VOC_Wider_pedestrian/Annotations'
+        create_dir_if_not_exists(annodir)
+        create_dir_if_not_exists('/media/milton/ssd1/research/competitions/data_wider_pedestrian/VOC_Wider_pedestrian/JPEGImages')
         xml_file_name=image_name.split('.')[0]+".xml"
         xml_file=os.path.join(annodir, xml_file_name)
         image_path=os.path.abspath(os.path.join(data_dir,"train", image_name))
