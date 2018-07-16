@@ -25,6 +25,7 @@ from data_reader_pedestrian import get_test_loader_for_upload
 import coco_eval
 assert torch.__version__.split('.')[1] == '4'
 from tensorboardX import SummaryWriter
+import time
 log_dir='logs'
 if not os.path.exists(log_dir):
     os.makedirs(log_dir)
@@ -50,7 +51,7 @@ def main(args=None):
 	todo s:
 		################## ToDo ########################
 		1. download more images using image_utils and isic-arhive. Also, use more online resources for data.
-		2.
+		2. Use Augmentations fromPytorchSSD using pascal voc data format.
 		3. use pair augmentation, random erase
 		4. download more images for each classes.
 		5. preprocessing and feature extraction
@@ -72,7 +73,7 @@ def main(args=None):
 	parser.add_argument('--csv_val', help='Path to file containing validation annotations (optional, see readme)')
 
 	parser.add_argument('--depth', help='Resnet depth, must be one of 18, 34, 50, 101, 152', type=int, default=50)
-	parser.add_argument('--epochs', help='Number of epochs', type=int, default=100)
+	parser.add_argument('--epochs', help='Number of epochs', type=int, default=200)
 
 	parser = parser.parse_args(args)
 
@@ -111,7 +112,7 @@ def main(args=None):
 
 	else:
 		raise ValueError('Dataset type not understood (must be csv or coco), exiting.')
-	batch_size=12
+	batch_size=10
 	num_classes=1
 	print("Total Train:{}".format(len(dataset_train)))
 	sampler = AspectRatioBasedSampler(dataset_train, batch_size=batch_size, drop_last=False)
@@ -140,6 +141,10 @@ def main(args=None):
 		raise ValueError('Unsupported model depth, must be one of 18, 34, 50, 101, 152')
 	use_gpu = True
 
+	optimizer = optim.Adam(retinanet.parameters(), lr=0.001)
+
+	scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=3, verbose=True)
+
 	if use_gpu:
 		retinanet_sk=copy.deepcopy(retinanet.cpu()) # will hold the raw model, later it will be loaded with new model weight to test in seperate gpus.
 		retinanet = retinanet.cuda()
@@ -162,9 +167,7 @@ def main(args=None):
 		print('\n==> Resume Failed...')
 	retinanet.training = True
 
-	optimizer = optim.Adam(retinanet.parameters(), lr=1e-3)
 
-	scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=3, verbose=True)
 
 	total_loss = losses.loss
 
@@ -219,8 +222,8 @@ def main(args=None):
 				progress_bar(iter_num,iter_per_epoch,msg)
 				# print('Epoch: {} | Iteration: {} | Classification loss: {:1.5f} | Regression loss: {:1.5f} | Running loss: {:1.5f}'.format(epoch_num, iter_num, float(classification_loss), float(regression_loss), np.mean(loss_hist)))
 				# break
-				# if iter_num>100:
-				# 	break
+				if iter_num>250:
+					break
 			except Exception as e:
 				print(e)
 
@@ -233,25 +236,28 @@ def main(args=None):
 			test_data=get_test_loader_for_upload(1)
 			new_map=coco_eval.evaluate_wider_pedestrian(epoch_num, dataset_val, retinanet,retinanet_sk ) # to validate
 			# print("\nepoch:{}, validation average precision score:{}".format(epoch_num, new_map))
+			if new_map==None:
+				continue
 			writer.add_scalar('validation mAP',new_map,epoch_num)
 			scheduler.step(np.mean(epoch_loss))
 			epoch_saved_model_name = "checkpoint/resnet{}_{}_epoch_{}.pth".format(parser.depth, parser.dataset, epoch_num)
-			save_model(retinanet,epoch_saved_model_name,new_map,epoch_num)
+			save_model(retinanet,optimizer,epoch_saved_model_name,new_map,epoch_num)
 			if new_map>best_mAP:
 				print("Found new best model with mAP:{:.7f}, over {:.7f}".format(new_map, best_mAP))
-				save_model(retinanet,best_saved_model_name,new_map,epoch_num)
+				save_model(retinanet,optimizer,best_saved_model_name,new_map,epoch_num)
 				best_mAP=new_map
 
-			retinanet.train()
+		retinanet.train()
 
 # torch.save(retinanet, '1_'.format(epoch_num,best_saved_model_name))
 
-def save_model(retinanet,best_saved_model_name, mAP, epoch):
+def save_model(retinanet,optimizer,best_saved_model_name, mAP, epoch):
 	print('\n Saving model with mAP {} in {}'.format(mAP, best_saved_model_name))
 	state = {
 		'model': retinanet,
 		'map': mAP, # mAP on validation set.
-		'epoch': epoch,
+		'epoch': epoch+1,
+		'optimizer':optimizer
 	}
 	if not os.path.isdir('checkpoint'):
 		os.mkdir('checkpoint')

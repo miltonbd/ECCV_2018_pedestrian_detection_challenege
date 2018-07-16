@@ -5,17 +5,36 @@ import numpy as np
 import imageio
 from utils.utils import *
 import threading
+from data.voc0712 import *
+
+import argparse
+import pickle
+import time
+from utils.utils import *
+import numpy as np
+import os
+import torch
+import torch.backends.cudnn as cudnn
+import torch.nn.init as init
+import torch.optim as optim
+import torch.utils.data as data
+from torch.autograd import Variable
+
+from data import VOCroot, COCOroot, VOC_300, VOC_512, COCO_300, COCO_512, COCO_mobile_300, AnnotationTransform, \
+    COCODetection, VOCDetection, detection_collate, BaseTransform, preproc
+from layers.functions import Detect, PriorBox
+from layers.modules import MultiBoxLoss
+from utils.nms_wrapper import nms
+from utils.timer import Timer
 
 """
 5Dtensor
 todo save some random tensor.
 generate augmentation data in pascal voc format and later append them in mscoco files in training.
 """
-
-aug_save_dir="/media/milton/ssd1/research/competitions/EmotiW_2018/Train_aug"
-
-create_dir_if_not_exists(aug_save_dir)
-
+data_dir="/media/milton/ssd1/research/competitions/data_wider_pedestrian"
+create_dir_if_not_exists(data_dir)
+voc_format_data_dir=os.path.join(data_dir,'VOC_Wider_pedestrian')
 seq = iaa.Sequential([
     # Small gaussian blur with random sigma between 0 and 0.5.
     # But we only blur about 50% of all images.
@@ -45,8 +64,16 @@ seq = iaa.Sequential([
     ),
     iaa.Grayscale(alpha=(0.0, 1.0))
 ], random_order=False)  # apply augmenters in random order
-
-aug_batch_size=100
+batch_size=4
+train_sets = [('', 'trainval')]
+rgb_means = (104, 117, 123)
+rgb_std = (1, 1, 1)
+p=.6
+train_dataset = VOCDetection(voc_format_data_dir, train_sets, preproc(
+    512, rgb_means, rgb_std, p), AnnotationTransform())
+data.DataLoader(train_dataset, batch_size,
+                                                  shuffle=True, num_workers=4,
+                                                  collate_fn=detection_collate)
 
 def read_batch(image_paths):
     images=[]
