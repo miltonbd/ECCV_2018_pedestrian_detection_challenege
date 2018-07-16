@@ -156,6 +156,8 @@ def main(args=None):
 		retinanet.load_state_dict(checkpoint['model'].state_dict())
 		best_mAP=checkpoint['map']
 		start_epoch=checkpoint['epoch']
+		optimizer.load_state_dict(checkpoint['optimizer'].state_dict())
+
 		# optimizer.load_state_dict(checkpoint['optimizer_state'])
 		print("Loaded checkpoint '{}' (epoch {})"
 			  .format(best_saved_model_name, checkpoint['epoch']))
@@ -222,8 +224,8 @@ def main(args=None):
 				progress_bar(iter_num,iter_per_epoch,msg)
 				# print('Epoch: {} | Iteration: {} | Classification loss: {:1.5f} | Regression loss: {:1.5f} | Running loss: {:1.5f}'.format(epoch_num, iter_num, float(classification_loss), float(regression_loss), np.mean(loss_hist)))
 				# break
-				if iter_num>250:
-					break
+				# if iter_num>250:
+				# 	break
 			except Exception as e:
 				print(e)
 

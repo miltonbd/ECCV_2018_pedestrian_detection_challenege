@@ -71,10 +71,12 @@ rgb_std = (1, 1, 1)
 p=.6
 train_dataset = VOCDetection(voc_format_data_dir, train_sets, preproc(
     512, rgb_means, rgb_std, p), AnnotationTransform())
-data.DataLoader(train_dataset, batch_size,
+train_loader=data.DataLoader(train_dataset, batch_size,
                                                   shuffle=True, num_workers=4,
                                                   collate_fn=detection_collate)
 
+
+print("Total items:{}".format(len(train_dataset)))
 def read_batch(image_paths):
     images=[]
     for source_img_path in image_paths:

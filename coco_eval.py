@@ -110,8 +110,8 @@ def evaluate_wider_pedestrian(epoch, dataset, model_new,retinanet_sk, threshold=
         image_ids = []
         scores_for_upload=[]
         for index in range(len(dataset)):
-            if index>50:
-                break
+            # if index>50:
+            #     break
             data = dataset[index]
             scale = data['scale']
             progress_bar(index, len(dataset), "Evaluating........")
