@@ -72,7 +72,7 @@ def main(args=None):
 	parser.add_argument('--csv_classes', help='Path to file containing class list (see readme)')
 	parser.add_argument('--csv_val', help='Path to file containing validation annotations (optional, see readme)')
 
-	parser.add_argument('--depth', help='Resnet depth, must be one of 18, 34, 50, 101, 152', type=int, default=152)
+	parser.add_argument('--depth', help='Resnet depth, must be one of 18, 34, 50, 101, 152', type=int, default=101)
 	parser.add_argument('--epochs', help='Number of epochs', type=int, default=200)
 
 	parser = parser.parse_args(args)
@@ -112,7 +112,7 @@ def main(args=None):
 
 	else:
 		raise ValueError('Dataset type not understood (must be csv or coco), exiting.')
-	batch_size=4
+	batch_size=6
 	num_classes=1
 	print("Total Train:{}".format(len(dataset_train)))
 	sampler = AspectRatioBasedSampler(dataset_train, batch_size=batch_size, drop_last=False)
@@ -237,17 +237,21 @@ def main(args=None):
 			retinanet.eval()
 			test_data=get_test_loader_for_upload(1)
 			new_map=coco_eval.evaluate_wider_pedestrian(epoch_num, dataset_val, retinanet,retinanet_sk ) # to validate
+
+			epoch_saved_model_name = "checkpoint/resnet{}_{}_epoch_{}.pth".format(parser.depth, parser.dataset,
+																				  epoch_num)
+			save_model(retinanet, optimizer, epoch_saved_model_name, new_map, epoch_num)
 			# print("\nepoch:{}, validation average precision score:{}".format(epoch_num, new_map))
 			if new_map==None:
 				continue
 			writer.add_scalar('validation mAP',new_map,epoch_num)
 			scheduler.step(np.mean(epoch_loss))
-			epoch_saved_model_name = "checkpoint/resnet{}_{}_epoch_{}.pth".format(parser.depth, parser.dataset, epoch_num)
-			save_model(retinanet,optimizer,epoch_saved_model_name,new_map,epoch_num)
+
 			if new_map>best_mAP:
 				print("Found new best model with mAP:{:.7f}, over {:.7f}".format(new_map, best_mAP))
 				save_model(retinanet,optimizer,best_saved_model_name,new_map,epoch_num)
 				best_mAP=new_map
+				coco_eval.evaluate_wider_pedestrian_for_upload(epoch_num, test_data, retinanet )
 
 		retinanet.train()
 

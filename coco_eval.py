@@ -10,7 +10,7 @@ from utils.utils import progress_bar
 from torchvision import transforms
 from dataloader import Normalizer, Resizer
 import  skimage
-def evaluate_wider_pedestrian_for_upload(epoch,dataset, model, threshold=0.8):
+def evaluate_wider_pedestrian_for_upload(epoch,dataset, model, threshold=0.3):
     print("\n==> Testing wider pedestrian dataset.")
     model.eval()
 
@@ -75,14 +75,15 @@ def evaluate_wider_pedestrian_for_upload(epoch,dataset, model, threshold=0.8):
 
             # append image to list of processed images
         from utils.file_utils import save_to_file
-        save_to_file('res/scores.txt', scores_for_upload)
+        submit_file = 'res/scores.txt'
+        save_to_file(submit_file, scores_for_upload)
         # import shutil
         # shutil.make_archive('res/scores.txt', 'zip', 'res')
 
         import zipfile
-        archive = zipfile.ZipFile("submit_files/score_{}_{}.zip".format(epoch,test_score), "w")
+        archive = zipfile.ZipFile("res/scores.zip", "w")
         try:
-            archive.write('res/scores.txt')
+            archive.write(submit_file)
             print('Files added.')
         finally:
             print('Reading files now.')

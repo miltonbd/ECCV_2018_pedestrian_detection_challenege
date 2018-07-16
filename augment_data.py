@@ -64,8 +64,8 @@ from utils.utils import progress_bar
 
 ia.seed(1)
 JPEG_dir='/media/milton/ssd1/research/competitions/data_wider_pedestrian/VOC_Wider_pedestrian/JPEGImages_512'
-anno_dir="/media/milton/ssd1/research/competitions/data_wider_pedestrian/VOC_Wider_pedestrian/Annotations_512"
-
+# anno_dir="/media/milton/ssd1/research/competitions/data_wider_pedestrian/VOC_Wider_pedestrian/Annotations_512"
+anno_dir="/media/milton/ssd1/research/competitions/data_wider_pedestrian/annotations_train"
 JPEG_aug_dir='/media/milton/ssd1/research/competitions/data_wider_pedestrian/VOC_Wider_pedestrian/JPEGImages_aug'
 anno_aug_dir="/media/milton/ssd1/research/competitions/data_wider_pedestrian/VOC_Wider_pedestrian/Annotations_aug"
 
