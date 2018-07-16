@@ -95,10 +95,10 @@ def read_pascal_annotation(anno_file):
     objects=[]
     for obj in objs:
         class_label=obj.find('name').text
-        xmin=int(obj.find('bndbox/xmin').text)
-        xmax=int(obj.find('bndbox/xmax').text)
-        ymin=int(obj.find('bndbox/ymin').text)
-        ymax=int(obj.find('bndbox/ymax').text)
+        xmin=int(float(obj.find('bndbox/xmin').text))
+        xmax=int(float(obj.find('bndbox/xmax').text))
+        ymin=int(float(obj.find('bndbox/ymin').text))
+        ymax=int(float(obj.find('bndbox/ymax').text))
         objects.append([xmin,ymin,xmax,ymax,1])
     res={
         'filename':filename,

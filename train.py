@@ -72,7 +72,7 @@ def main(args=None):
 	parser.add_argument('--csv_classes', help='Path to file containing class list (see readme)')
 	parser.add_argument('--csv_val', help='Path to file containing validation annotations (optional, see readme)')
 
-	parser.add_argument('--depth', help='Resnet depth, must be one of 18, 34, 50, 101, 152', type=int, default=50)
+	parser.add_argument('--depth', help='Resnet depth, must be one of 18, 34, 50, 101, 152', type=int, default=152)
 	parser.add_argument('--epochs', help='Number of epochs', type=int, default=200)
 
 	parser = parser.parse_args(args)
@@ -112,7 +112,7 @@ def main(args=None):
 
 	else:
 		raise ValueError('Dataset type not understood (must be csv or coco), exiting.')
-	batch_size=10
+	batch_size=4
 	num_classes=1
 	print("Total Train:{}".format(len(dataset_train)))
 	sampler = AspectRatioBasedSampler(dataset_train, batch_size=batch_size, drop_last=False)

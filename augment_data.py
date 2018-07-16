@@ -60,6 +60,7 @@ import imgaug
 from imgaug import augmenters as iaa
 import imgaug as ia
 from utils.pascal_utils import *
+from utils.utils import progress_bar
 
 ia.seed(1)
 JPEG_dir='/media/milton/ssd1/research/competitions/data_wider_pedestrian/VOC_Wider_pedestrian/JPEGImages_512'
@@ -70,8 +71,8 @@ anno_aug_dir="/media/milton/ssd1/research/competitions/data_wider_pedestrian/VOC
 
 create_dir_if_not_exists(JPEG_dir)
 create_dir_if_not_exists(anno_dir)
-create_dir_if_not_exists(JPEG_aug_dir)
-create_dir_if_not_exists(anno_aug_dir)
+# create_dir_if_not_exists(JPEG_aug_dir)
+# create_dir_if_not_exists(anno_aug_dir)
 
 class VocDataset(Dataset):
     def __init__(self, dataset, anno_dir):
@@ -101,25 +102,70 @@ def collate_aug(batch):
         targets.append(sample['annot'])
     return (np.asarray(imgs), targets)
 
-def resize(images,boxes, size=512):
+def resize(images,boxes,batch_idx, size=556):
     boxes_augs = []
     for box1 in boxes:
         for box in box1:
             boxes_augs.append(ia.BoundingBox(x1=box[0], y1=box[1], x2=box[2], y2=box[3]))
 
     bbs = ia.BoundingBoxesOnImage(boxes_augs, shape=images[0].shape)
+    sometimes = lambda aug: iaa.Sometimes(0.5, aug)
 
     seq = iaa.Sequential([
-        iaa.Scale(556),
-    ])
+        iaa.Fliplr(0.5),  # horizontal flips
+        iaa.Crop(percent=(0, 0.1)),  # random crops
+        # Small gaussian blur with random sigma between 0 and 0.5.
+        # But we only blur about 50% of all images.
+        iaa.Sometimes(0.5,
+                      iaa.GaussianBlur(sigma=(0, 0.5)),
+                      # Invert each image's chanell with 5% probability.
+                      # This sets each pixel value v to 255-v.
+                      iaa.Invert(0.05, per_channel=True),  # invert color channels
+
+                      # Add a value of -10 to 10 to each pixel.
+                      iaa.Add((-10, 10), per_channel=0.5),
+
+                      # Change brightness of images (50-150% of original value).
+                      iaa.Multiply((0.5, 1.5), per_channel=0.5)
+
+                      # Improve or worsen the contrast of images.
+                      # Convert each image to grayscale and then overlay the
+                      # result with the original with random alpha. I.e. remove
+                      # colors with varying strengths.
+
+                      ),
+        # Strengthen or weaken the contrast in each image.
+        iaa.ContrastNormalization((0.75, 1.5)),
+        # Add gaussian noise.
+        # For 50% of all images, we sample the noise once per pixel.
+        # For the other 50% of all images, we sample the noise per pixel AND
+        # channel. This can change the color (not only brightness) of the
+        # pixels.
+        iaa.AdditiveGaussianNoise(loc=0, scale=(0.0, 0.05 * 255), per_channel=0.5),
+        # Make some images brighter and some darker.
+        # In 20% of all cases, we sample the multiplier once per channel,
+        # which can end up changing the color of the images.
+        # Apply affine transformations to each image.
+        # Scale/zoom them, translate/move them, rotate them and shear them.
+        iaa.Affine(
+            scale={"x": (0.8, 1.2), "y": (0.8, 1.2)},
+            translate_percent={"x": (-0.2, 0.2), "y": (-0.2, 0.2)},
+            rotate=(-10, 10),
+            shear=(-4, 4)
+        )
+    ], random_order=True)  # apply augmenters in random order
 
     seq_det = seq.to_deterministic()  # Call this once PER BATCH, otherwise you will always get the to get random
     images_data=images
     # for i,img in enumerate(images):
     #     images_data[i,:,:,:]=img[:,:,:]
-    image_augs = seq_det.augment_images(images_data)
+    aug_images = seq_det.augment_images(images_data)
     bbs_augs = seq_det.augment_bounding_boxes([bbs])
-    return (image_augs, bbs_augs)
+    for i, aug_bb in enumerate(bbs_augs):
+        idx_i = batch_idx + i
+        imgid = train_dataset[idx_i]
+        save_augs(JPEG_dir, anno_dir, idx_i, aug_images[i], aug_bb, imgid + "_" + str(idx_i))
+    return
 
 print("Total items:{}".format(len(train_dataset)))
 
@@ -127,7 +173,7 @@ voc_dataset_resize=VocDataset(train_dataset, 'Annotations')
 
 train_dataloader_resize = DataLoader(voc_dataset_resize, num_workers=4, batch_size=1, collate_fn=collate_aug)
 
-def aug_images(images,boxes):
+def augment_images(images,boxes):
     boxes_augs = []
     for box1 in boxes:
         for box in box1:
@@ -136,18 +182,19 @@ def aug_images(images,boxes):
     bbs = ia.BoundingBoxesOnImage(boxes_augs, shape=images[0].shape)
 
     seq = iaa.Sequential([
-        iaa.Fliplr(0.5),
-        iaa.Flipud(.3)
+        iaa.Scale(400),
     ])
 
     seq_det = seq.to_deterministic()  # Call this once PER BATCH, otherwise you will always get the to get random
-    images_data=images
-
+    images_data = images
+    # for i,img in enumerate(images):
+    #     images_data[i,:,:,:]=img[:,:,:]
     image_augs = seq_det.augment_images(images_data)
     bbs_augs = seq_det.augment_bounding_boxes([bbs])
     return (image_augs, bbs_augs)
 
 def save_augs(JPEG_dir,anno_dir, idx_i,aug_img,aug_bb,imgid):
+    progress_bar(idx_i,len(train_dataset)," Augmensmiting.........")
     save_path_img = os.path.join(JPEG_dir, "{}.jpg".format(imgid))
     imageio.imwrite(save_path_img, aug_img)
     save_path_xml = os.path.join(anno_dir, "{}.xml".format(imgid))
@@ -157,35 +204,29 @@ def save_augs(JPEG_dir,anno_dir, idx_i,aug_img,aug_bb,imgid):
     write_pascal_annotation_aug(save_path_img, bbox, save_path_xml)
 
 
-def augment_images(images):
-    image_augs = seq.augment_images(images)
-    return  image_augs
-
-
 def resize_to_512():
     for batch_idx, data in enumerate(train_dataloader_resize):
-        aug_images, aug_bbs = resize(data[0], data[1])
-        for i, aug_bb in enumerate(aug_bbs):
-            idx_i = batch_idx + i
-            # save_augs(JPEG_dir,anno_dir,idx_i,aug_images,aug_bb)
-            imgid=train_dataset[idx_i]
-            t = threading.Thread(target=save_augs, args=(JPEG_dir, anno_dir, idx_i, aug_images[i], aug_bb,imgid))
-            t.start()
+        # save_augs(JPEG_dir,anno_dir,idx_i,aug_images,aug_bb)
+        t = threading.Thread(target=resize, args=(data[0], data[1], batch_idx))
+        t.start()
+#
+# voc_dataset_aug=VocDataset(train_dataset, 'Annotations_512')
+#
+# train_dataloader_aug = DataLoader(voc_dataset_aug, num_workers=4, batch_size=1, collate_fn=collate_aug)
+#
+# def aug_train_images_from_512():
+#     for batch_idx, data in enumerate(train_dataloader_aug):
+#         aug_images, aug_bbs = augment_images(data[0], data[1])
+#         for i, aug_bb in enumerate(aug_bbs):
+#             idx_i = batch_idx + i
+#             imgid=train_dataset[idx_i]
+#             save_augs(JPEG_aug_dir, anno_aug_dir, idx_i, aug_images[i], aug_bb,imgid+"_"+str(idx_i))
+#             # t = threading.Thread(target=save_augs, args=(JPEG_aug_dir, anno_aug_dir, idx_i, aug_images[i], aug_bb,i))
+#             # t.start()
+#             break
+#         break
 
+# resize_to_512() run this first to resize the images to 512 keeping the bounding boxes.
 
-
-
-voc_dataset_aug=VocDataset(train_dataset, 'Annotations_512')
-
-train_dataloader_aug = DataLoader(voc_dataset_aug, num_workers=4, batch_size=4, collate_fn=collate_aug)
-
-def aug_512():
-    for batch_idx, data in enumerate(train_dataloader_aug):
-        aug_images, aug_bbs = aug_images(data[0], data[1])
-        for i, aug_bb in enumerate(aug_bbs):
-            idx_i = batch_idx + i
-            # save_augs(JPEG_dir,anno_dir,idx_i,aug_images,aug_bb)
-            t = threading.Thread(target=save_augs, args=(JPEG_aug_dir, anno_aug_dir, idx_i, aug_images[i], aug_bb,i))
-            t.start()
-
+# aug_train_images_from_512()
 resize_to_512()
