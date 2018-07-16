@@ -33,7 +33,12 @@ def show_original_512():
         imageid)
     draw_bbox_pascal(anno_path)
 
-show_original_512()
+def show_inria_person():
+    anno_path = '/media/milton/ssd1/research/competitions/data_wider_pedestrian/annotations_train/PennPed00001.xml'
+    draw_bbox_pascal(anno_path)
+
+show_inria_person()
+# show_original_512()
 # show_augment()
 # anno_path='/media/milton/ssd1/dataset/pascal/VOCdevkit/VOC2007/Annotations/000247.xml'
 # draw_bbox_pascal(anno_path,'/media/milton/ssd1/dataset/pascal/VOCdevkit/VOC2007/JPEGImages')

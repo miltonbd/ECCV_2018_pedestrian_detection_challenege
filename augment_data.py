@@ -63,7 +63,7 @@ from utils.pascal_utils import *
 from utils.utils import progress_bar
 
 ia.seed(1)
-JPEG_dir='/media/milton/ssd1/research/competitions/data_wider_pedestrian/VOC_Wider_pedestrian/JPEGImages_512'
+JPEG_dir='/media/milton/ssd1/research/competitions/data_wider_pedestrian/VOC_Wider_pedestrian/JPEGImages_aug'
 # anno_dir="/media/milton/ssd1/research/competitions/data_wider_pedestrian/VOC_Wider_pedestrian/Annotations_512"
 anno_dir="/media/milton/ssd1/research/competitions/data_wider_pedestrian/annotations_train"
 JPEG_aug_dir='/media/milton/ssd1/research/competitions/data_wider_pedestrian/VOC_Wider_pedestrian/JPEGImages_aug'
@@ -87,6 +87,8 @@ class VocDataset(Dataset):
         annotations=read_pascal_annotation(xml_file)
         boxes=np.asarray(annotations['objects'])
         image_path=annotations['filename']
+        if not os.path.exists(image_path):
+            print("{} does not exists".format(image_path))
         image=io.imread(image_path)
         res={
             'img':image,
@@ -152,7 +154,12 @@ def resize(images,boxes,batch_idx, size=556):
             translate_percent={"x": (-0.2, 0.2), "y": (-0.2, 0.2)},
             rotate=(-10, 10),
             shear=(-4, 4)
-        )
+        ),
+        iaa.Superpixels(n_segments=100),
+        iaa.Invert(0.2),
+        iaa.Dropout(0.03),
+        iaa.CoarseSaltAndPepper(size_percent=0.05),
+        iaa.ElasticTransformation(2)
     ], random_order=True)  # apply augmenters in random order
 
     seq_det = seq.to_deterministic()  # Call this once PER BATCH, otherwise you will always get the to get random
