@@ -1,31 +1,11 @@
-import os
-from PIL import Image
 from imgaug import augmenters as iaa
-import numpy as np
 import imageio
-from utils.utils import *
-import threading
 from data.voc0712 import *
 
-import argparse
-import pickle
-import time
 from utils.utils import *
 import numpy as np
 import os
 import torch
-import torch.backends.cudnn as cudnn
-import torch.nn.init as init
-import torch.optim as optim
-import torch.utils.data as data
-from torch.autograd import Variable
-
-from data import VOCroot, COCOroot, VOC_300, VOC_512, COCO_300, COCO_512, COCO_mobile_300, AnnotationTransform, \
-    COCODetection, VOCDetection, detection_collate, BaseTransform, preproc
-from layers.functions import Detect, PriorBox
-from layers.modules import MultiBoxLoss
-from utils.nms_wrapper import nms
-from utils.timer import Timer
 
 """
 5Dtensor
@@ -65,18 +45,101 @@ seq = iaa.Sequential([
     iaa.Grayscale(alpha=(0.0, 1.0))
 ], random_order=False)  # apply augmenters in random order
 batch_size=4
-train_sets = [('', 'trainval')]
-rgb_means = (104, 117, 123)
-rgb_std = (1, 1, 1)
-p=.6
-train_dataset = VOCDetection(voc_format_data_dir, train_sets, preproc(
-    512, rgb_means, rgb_std, p), AnnotationTransform())
-train_loader=data.DataLoader(train_dataset, batch_size,
-                                                  shuffle=True, num_workers=4,
-                                                  collate_fn=detection_collate)
+trainval_txt=os.path.join(voc_format_data_dir,'ImageSets','Main','trainval.txt')
+from utils.file_utils import read_text_file
+from torch.utils.data import Dataset,DataLoader
+from PIL import Image
+from utils.pascal_utils import read_pascal_annotation
+from torchvision.transforms import Compose
+from skimage import io, color
+from skimage.transform import resize
+trainvals=read_text_file(trainval_txt)
+train_dataset = [img.strip() for img in trainvals]
+import copy
+import imgaug
+from imgaug import augmenters as iaa
+import imgaug as ia
 
+class VocDataset(Dataset):
+    def __init__(self, dataset):
+        self.dataset=dataset
+
+    def __len__(self):
+        return len(self.dataset)
+
+    def __getitem__(self, index):
+        ia.seed(1)
+        xml_file=os.path.join(voc_format_data_dir,'Annotations',self.dataset[index]+".xml")
+        annotations=read_pascal_annotation(xml_file)
+        boxes=np.asarray(annotations['objects'])
+        image_path=os.path.join(voc_format_data_dir,'JPEGImages',self.dataset[index]+".jpg")
+        image=io.imread(image_path)
+
+        boxes_aug=[]
+        for box in boxes:
+            boxes_aug.append(ia.BoundingBox(x1=box[0], y1=box[1], x2=box[2], y2=box[3]))
+
+        # image = ia.quokka(size=(220, 220))
+        bbs = ia.BoundingBoxesOnImage(boxes_aug, shape=image.shape)
+
+        seq = iaa.Sequential([
+            iaa.Scale(220)
+        ])
+
+        # Make our sequence deterministic.
+        # We can now apply it to the image and then to the BBs and it will
+        # lead to the same augmentations.
+        # IMPORTANT: Call this once PER BATCH, otherwise you will always get the
+        # exactly same augmentations for every batch!
+        seq_det = seq.to_deterministic()
+
+        # Augment BBs and images.
+        # As we only have one image and list of BBs, we use
+        # [image] and [bbs] to turn both into lists (batches) for the
+        # functions and then [0] to reverse that. In a real experiment, your
+        # variables would likely already be lists.
+        image_aug = seq_det.augment_images([image])[0]
+        bbs_aug = seq_det.augment_bounding_boxes([bbs])[0]
+
+        # print coordinates before/after augmentation (see below)
+        # use .x1_int, .y_int, ... to get integer coordinates
+        for i in range(len(bbs.bounding_boxes)):
+            before = bbs.bounding_boxes[i]
+            after = bbs_aug.bounding_boxes[i]
+            print("BB %d: (%.4f, %.4f, %.4f, %.4f) -> (%.4f, %.4f, %.4f, %.4f)" % (
+                i,
+                before.x1, before.y1, before.x2, before.y2,
+                after.x1, after.y1, after.x2, after.y2)
+                  )
+
+        # image with BBs before/after augmentation (shown below)
+        image_before = bbs.draw_on_image(image, thickness=2)
+        image_after = bbs_aug.draw_on_image(image_aug, thickness=2, color=[0, 0, 255])
+
+        img_resized=resize(img,(target_w,target_h),preserve_range=True)
+        res={
+            'img':img_resized,
+            'annot':boxes.astype(np.float64)
+        }
+        return res
+
+def collate_aug(batch):
+    targets = []
+    imgs = []
+    for _, sample in enumerate(batch):
+        imgs.append(sample['img'])
+        targets.append(sample['annot'])
+    return (imgs, targets)
 
 print("Total items:{}".format(len(train_dataset)))
+
+voc_dataset=VocDataset(train_dataset)
+
+train_dataloader = DataLoader(voc_dataset, num_workers=4, batch_size=batch_size, collate_fn=collate_aug)
+
+for batch_idx,data in enumerate(train_dataloader):
+    print(data)
+
 def read_batch(image_paths):
     images=[]
     for source_img_path in image_paths:

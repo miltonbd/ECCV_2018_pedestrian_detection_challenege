@@ -1,36 +1,11 @@
-from statics import *
-import os
-from scipy.io import loadmat
 from torch.utils.data.dataset import Dataset
-import numpy as np
-import imageio
-import torch
 from torchvision import transforms
-import glob
 from PIL import Image
-import os
 from torchvision.transforms import *
-import threading
+
 data_set_name="ISIC 2018"
-import argparse
-import pickle
-import time
 
-import numpy as np
-import os
-import torch
-import torch.backends.cudnn as cudnn
-import torch.nn.init as init
-import torch.optim as optim
-import torch.utils.data as data
-from torch.autograd import Variable
-
-from data import VOCroot, COCOroot, VOC_300, VOC_512, COCO_300, COCO_512, COCO_mobile_300, AnnotationTransform, \
-    COCODetection, VOCDetection, detection_collate, BaseTransform, preproc
-from layers.functions import Detect, PriorBox
-from layers.modules import MultiBoxLoss
-from utils.nms_wrapper import nms
-from utils.timer import Timer
+from layers.functions import Detect
 
 
 def str2bool(v):
@@ -154,7 +129,6 @@ class DatasetReader(Dataset):
     def __len__(self):
         return len(self.data)
 from statics import *
-from utils import *
 from data import *
 def get_data_loader(args):
     return get_voc_reader(args)
@@ -189,7 +163,7 @@ def test():
 """
 all the ignore parts of image will be zero.
 """
-from file_utils import *
+from utils.file_utils import *
 
 def get_ignore_parts_for_train():
     annotations=[]

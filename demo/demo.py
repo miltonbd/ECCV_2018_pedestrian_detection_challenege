@@ -1,7 +1,6 @@
-from file_utils import read_text_file
+from utils.file_utils import read_text_file
 import os
 import cv2
-import math
 
 val_dir='/media/milton/ssd1/research/competitions/data_wider_pedestrian/val'
 for line in read_text_file('scores.txt'):

@@ -1,19 +1,16 @@
 from __future__ import print_function
 
-from pycocotools.coco import COCO
 from pycocotools.cocoeval import COCOeval
 
 import numpy as np
 import json
 import os
-from PIL import Image
 import torch
 from utils.utils import progress_bar
 from torchvision import transforms
 from dataloader import Normalizer, Resizer
-from torchvision.transforms import ToTensor
 import  skimage
-def evaluate_wider_pedestrian_for_upload(epoch,dataset, model, threshold=0.3):
+def evaluate_wider_pedestrian_for_upload(epoch,dataset, model, threshold=0.8):
     print("\n==> Testing wider pedestrian dataset.")
     model.eval()
 
@@ -77,7 +74,7 @@ def evaluate_wider_pedestrian_for_upload(epoch,dataset, model, threshold=0.3):
                 # results.append(image_result)
 
             # append image to list of processed images
-        from file_utils import save_to_file
+        from utils.file_utils import save_to_file
         save_to_file('res/scores.txt', scores_for_upload)
         # import shutil
         # shutil.make_archive('res/scores.txt', 'zip', 'res')
@@ -159,7 +156,7 @@ def evaluate_wider_pedestrian(epoch, dataset, model_new,retinanet_sk, threshold=
 
             # append image to list of processed images
             image_ids.append(dataset.image_ids[index])
-        from file_utils import save_to_file
+        from utils.file_utils import save_to_file
         save_to_file('submit_files/scores_validation.txt',scores_for_upload)
         # print progress
         if not len(results):
