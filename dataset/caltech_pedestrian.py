@@ -10,4 +10,11 @@ json_file=os.path.join(data_dir,'annotations.json')
 
 data=read_json_file(json_file)
 for set_key in data.keys():
-    print(set_key)
+    set_data=data[set_key]
+    for v_key in set_data.keys():
+        v_data=set_data[v_key].frames:
+        
+
+
+
+    break

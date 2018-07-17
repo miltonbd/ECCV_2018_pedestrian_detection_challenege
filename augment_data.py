@@ -32,6 +32,7 @@ from imgaug import augmenters as iaa
 import imgaug as ia
 from utils.pascal_utils import *
 from utils.utils import progress_bar
+import time
 
 ia.seed(1)
 JPEG_dir='/media/milton/ssd1/research/competitions/data_wider_pedestrian/VOC_Wider_pedestrian/JPEGImages_aug'
@@ -75,7 +76,7 @@ def collate_aug(batch):
         targets.append(sample['annot'])
     return (np.asarray(imgs), targets)
 
-def resize(images,boxes,batch_idx, size=556):
+def augment(images, boxes, batch_idx, size=556):
     from imgaug import parameters as iap
     boxes_augs = []
     for box1 in boxes:
@@ -84,9 +85,12 @@ def resize(images,boxes,batch_idx, size=556):
 
     bbs = ia.BoundingBoxesOnImage(boxes_augs, shape=images[0].shape)
     seq = iaa.Sequential([
-        iaa.Fliplr(0.5),  # horizontal flips
-        iaa.Flipud(0.5),  # horizontal flips
-        iaa.CropAndPad(percent=(-0.15, 0.15)),  # random crops
+        iaa.OneOf([
+            iaa.Fliplr(0.5),  # horizontal flips
+            iaa.Flipud(0.5),  # horizontal flips
+            iaa.CropAndPad(percent=(-0.15, 0.15)),  # random crops
+        ]),
+
         # Small gaussian blur with random sigma between 0 and 0.5.
         # But we only blur about 50% of all images.
         iaa.Sometimes(0.5,
@@ -205,10 +209,16 @@ def image_aug():
     train_dataset_aug.extend(train_dataset)
     voc_dataset_aug = VocDataset(train_dataset_aug, 'Annotations')
     train_dataloader_resize = DataLoader(voc_dataset_aug, num_workers=4, batch_size=1, collate_fn=collate_aug)
+    threads=[]
     for batch_idx, data in enumerate(train_dataloader_resize):
         # save_augs(JPEG_dir,anno_dir,idx_i,aug_images,aug_bb)
-        t = threading.Thread(target=resize, args=(data[0], data[1], batch_idx))
+        t = threading.Thread(target=augment, args=(data[0], data[1], batch_idx))
+        threads.append(t)
         t.start()
+        time.sleep(.00001)
+
+    for t in threads:
+        t.join()
 #
 # voc_dataset_aug=VocDataset(train_dataset, 'Annotations_512')
 #
