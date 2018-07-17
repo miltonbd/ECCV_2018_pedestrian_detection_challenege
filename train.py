@@ -63,6 +63,7 @@ def main(args=None):
 		11. multi scale testing.
 		12. soft nms
 		13. save model and load from previous epoch
+		14. https://github.com/uoguelph-mlrg/Cutout
 	"""
 
 	parser     = argparse.ArgumentParser(description='Simple training script for training a RetinaNet network.')
@@ -72,7 +73,7 @@ def main(args=None):
 	parser.add_argument('--csv_classes', help='Path to file containing class list (see readme)')
 	parser.add_argument('--csv_val', help='Path to file containing validation annotations (optional, see readme)')
 
-	parser.add_argument('--depth', help='Resnet depth, must be one of 18, 34, 50, 101, 152', type=int, default=50)
+	parser.add_argument('--depth', help='Resnet depth, must be one of 18, 34, 50, 101, 152', type=int, default=152)
 	parser.add_argument('--epochs', help='Number of epochs', type=int, default=200)
 
 	parser = parser.parse_args(args)
@@ -112,7 +113,7 @@ def main(args=None):
 
 	else:
 		raise ValueError('Dataset type not understood (must be csv or coco), exiting.')
-	batch_size=4
+	batch_size=2
 	num_classes=1
 	print("Total Train:{}".format(len(dataset_train)))
 	sampler = AspectRatioBasedSampler(dataset_train, batch_size=batch_size, drop_last=False)
@@ -141,7 +142,7 @@ def main(args=None):
 		raise ValueError('Unsupported model depth, must be one of 18, 34, 50, 101, 152')
 	use_gpu = True
 
-	optimizer = optim.Adam(retinanet.parameters(), lr=0.001)
+	optimizer = optim.Adam(retinanet.parameters(), lr=0.0001)
 
 	scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=3, verbose=True)
 
@@ -254,7 +255,7 @@ def main(args=None):
 				print("Found new best model with mAP:{:.7f}, over {:.7f}".format(new_map, best_mAP))
 				save_model(retinanet,optimizer,best_saved_model_name,new_map,epoch_num)
 				best_mAP=new_map
-				coco_eval.evaluate_wider_pedestrian_for_upload(epoch_num, test_data, retinanet,retinanet_sk )
+				# coco_eval.evaluate_wider_pedestrian_for_upload(args.depth,epoch_num, test_data, retinanet,retinanet_sk )
 
 		retinanet.train()
 

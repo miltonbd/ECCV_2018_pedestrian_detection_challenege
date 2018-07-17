@@ -10,7 +10,7 @@ from utils.utils import progress_bar
 from torchvision import transforms
 from dataloader import Normalizer, Resizer
 import  skimage
-def evaluate_wider_pedestrian_for_upload(epoch, dataset, model_new,retinanet_sk, threshold=0.5):
+def evaluate_wider_pedestrian_for_upload(depth,epoch, dataset, model_new,retinanet_sk, threshold=0.1):
     print("\n==> Testing wider pedestrian dataset.")
     new_model_1 = model_new._modules['module']
     state_dict_new = new_model_1.state_dict()
@@ -18,7 +18,6 @@ def evaluate_wider_pedestrian_for_upload(epoch, dataset, model_new,retinanet_sk,
     model1=copy.deepcopy(retinanet_sk).cuda(0)
 
     model1.eval()
-
 
     with torch.no_grad():
 
@@ -86,19 +85,19 @@ def evaluate_wider_pedestrian_for_upload(epoch, dataset, model_new,retinanet_sk,
         # import shutil
         # shutil.make_archive('res/scores.txt', 'zip', 'res')
 
-        import zipfile
-        archive = zipfile.ZipFile("res/scores.txt.zip", "w")
-        try:
-            archive.write(submit_file)
-            print('Files added.')
-        finally:
-            print('Reading files now.')
-            archive.close()
+        # import zipfile
+        # archive = zipfile.ZipFile("scores.txt.zip", "w")
+        # try:
+        #     archive.write(submit_file)
+        #     print('Files added.')
+        # finally:
+        #     print('Reading files now.')
+        #     archive.close()
         model1.train()
         return
 
 import copy
-def evaluate_wider_pedestrian(epoch, dataset, model_new,retinanet_sk, threshold=0.5):
+def evaluate_wider_pedestrian(epoch, dataset, model_new,retinanet_sk, threshold=0.1):
     print("\n==> Evaluating wider pedestrian dataset.")
     new_model_1 = model_new._modules['module']
     state_dict_new = new_model_1.state_dict()
