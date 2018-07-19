@@ -10,8 +10,8 @@ from utils.utils import progress_bar
 from torchvision import transforms
 from dataloader import Normalizer, Resizer
 import  skimage
-def evaluate_wider_pedestrian_for_upload(depth,epoch, dataset, model_new,retinanet_sk, threshold=0.1):
-    print("\n==> Testing wider pedestrian dataset.")
+def evaluate_wider_pedestrian_for_upload(epoch, dataset, model_new,retinanet_sk, threshold,new_map):
+    print("\n==> Test wider pedestrian dataset with threshold:{}.".format(threshold))
     new_model_1 = model_new._modules['module']
     state_dict_new = new_model_1.state_dict()
     retinanet_sk.load_state_dict(state_dict_new)
@@ -80,7 +80,7 @@ def evaluate_wider_pedestrian_for_upload(depth,epoch, dataset, model_new,retinan
 
             # append image to list of processed images
         from utils.file_utils import save_to_file
-        submit_file = 'res/scores.txt'
+        submit_file = 'res/scores_{}_{}.txt'.format(threshold,new_map)
         save_to_file(submit_file, scores_for_upload)
         # import shutil
         # shutil.make_archive('res/scores.txt', 'zip', 'res')
@@ -97,8 +97,8 @@ def evaluate_wider_pedestrian_for_upload(depth,epoch, dataset, model_new,retinan
         return
 
 import copy
-def evaluate_wider_pedestrian(epoch, dataset, model_new,retinanet_sk, threshold=0.1):
-    print("\n==> Evaluating wider pedestrian dataset.")
+def evaluate_wider_pedestrian(epoch, dataset, model_new,retinanet_sk,threshold):
+    print("\n==> Evaluating wider pedestrian dataset with threshold:{}.".format(threshold))
     new_model_1 = model_new._modules['module']
     state_dict_new = new_model_1.state_dict()
     retinanet_sk.load_state_dict(state_dict_new)

@@ -113,7 +113,7 @@ def main(args=None):
 
 	else:
 		raise ValueError('Dataset type not understood (must be csv or coco), exiting.')
-	batch_size=2
+	batch_size=4
 	num_classes=1
 	print("Total Train:{}".format(len(dataset_train)))
 	sampler = AspectRatioBasedSampler(dataset_train, batch_size=batch_size, drop_last=False)
@@ -142,7 +142,7 @@ def main(args=None):
 		raise ValueError('Unsupported model depth, must be one of 18, 34, 50, 101, 152')
 	use_gpu = True
 
-	optimizer = optim.Adam(retinanet.parameters(), lr=0.0001)
+	optimizer = optim.Adam(retinanet.parameters(), lr=0.001)
 
 	scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=3, verbose=True)
 
@@ -187,7 +187,7 @@ def main(args=None):
 		freeze_bn(retinanet)
 
 		epoch_loss = []
-
+		# threshold=0.05
 		for iter_num, data in enumerate(dataloader_train):
 			iter_per_epoch = len(dataset_train) / batch_size
 
@@ -225,37 +225,67 @@ def main(args=None):
 				progress_bar(iter_num,iter_per_epoch,msg)
 				# print('Epoch: {} | Iteration: {} | Classification loss: {:1.5f} | Regression loss: {:1.5f} | Running loss: {:1.5f}'.format(epoch_num, iter_num, float(classification_loss), float(regression_loss), np.mean(loss_hist)))
 				# break
-				# if iter_num>20:
+				# if iter_num==0:
 				# 	break
+				if iter_num%500==0:
+					save_model(retinanet, optimizer, best_saved_model_name, epoch_num + 1, epoch_num)
+				if False:
+					retinanet.eval()
+					test_data = get_test_loader_for_upload(1)
+
+					# coco_eval.evaluate_wider_pedestrian_for_upload(epoch_num, test_data, retinanet, retinanet_sk)
+
+					new_map = coco_eval.evaluate_wider_pedestrian(epoch_num, dataset_val, retinanet,
+																  retinanet_sk,threshold)  # to validate
+
+					epoch_saved_model_name = "checkpoint/resnet{}_{}_epoch_{}.pth".format(parser.depth, parser.dataset,
+																						  epoch_num)
+					save_model(retinanet, optimizer, epoch_saved_model_name, new_map, epoch_num)
+					# print("\nepoch:{}, validation average precision score:{}".format(epoch_num, new_map))
+					if new_map == None:
+						continue
+					writer.add_scalar('validation mAP', new_map, epoch_num)
+					scheduler.step(np.mean(epoch_loss))
+
+					if new_map > best_mAP:
+						print("Found new best model with mAP:{:.7f}, over {:.7f}".format(new_map, best_mAP))
+						save_model(retinanet, optimizer, best_saved_model_name, new_map, epoch_num)
+						best_mAP = new_map
+						coco_eval.evaluate_wider_pedestrian_for_upload(parser.depth,epoch_num, test_data, retinanet,retinanet_sk )
+					retinanet.train()
+
 			except Exception as e:
 				print(e)
 
 		if parser.dataset == 'coco':
+
 			print('\n==>Evaluating dataset')
-			coco_eval.evaluate_coco(dataset_val, retinanet, threshold=0.05)
-
+			coco_eval.evaluate_coco(dataset_val, retinanet, threshold=0.2)
+			save_model(retinanet,optimizer,best_saved_model_name,0.5,epoch_num)
+			continue
 		elif parser.dataset == 'wider_pedestrain':
-			retinanet.eval()
-			test_data=get_test_loader_for_upload(1)
+			for threshold in range(16,90,10):
+				threshold=threshold/100
+				test_data=get_test_loader_for_upload(1)
 
-			# coco_eval.evaluate_wider_pedestrian_for_upload(epoch_num, test_data, retinanet, retinanet_sk)
+				# coco_eval.evaluate_wider_pedestrian_for_upload(epoch_num, test_data, retinanet, retinanet_sk)
 
-			new_map=coco_eval.evaluate_wider_pedestrian(epoch_num, dataset_val, retinanet,retinanet_sk ) # to validate
+				new_map=coco_eval.evaluate_wider_pedestrian(epoch_num, dataset_val, retinanet,retinanet_sk,threshold) # to validate
 
-			epoch_saved_model_name = "checkpoint/resnet{}_{}_epoch_{}.pth".format(parser.depth, parser.dataset,
-																				  epoch_num)
-			save_model(retinanet, optimizer, epoch_saved_model_name, new_map, epoch_num)
-			# print("\nepoch:{}, validation average precision score:{}".format(epoch_num, new_map))
-			if new_map==None:
-				continue
-			writer.add_scalar('validation mAP',new_map,epoch_num)
-			scheduler.step(np.mean(epoch_loss))
+				epoch_saved_model_name = "checkpoint/resnet{}_{}_epoch_{}.pth".format(parser.depth, parser.dataset,
+																					  epoch_num)
+				save_model(retinanet, optimizer, epoch_saved_model_name, new_map, epoch_num)
+				# print("\nepoch:{}, validation average precision score:{}".format(epoch_num, new_map))
+				if new_map==None:
+					continue
+				writer.add_scalar('validation mAP',new_map,epoch_num)
+				scheduler.step(np.mean(epoch_loss))
 
-			if new_map>best_mAP:
+				# if new_map>best_mAP:
 				print("Found new best model with mAP:{:.7f}, over {:.7f}".format(new_map, best_mAP))
 				save_model(retinanet,optimizer,best_saved_model_name,new_map,epoch_num)
 				best_mAP=new_map
-				# coco_eval.evaluate_wider_pedestrian_for_upload(args.depth,epoch_num, test_data, retinanet,retinanet_sk )
+				coco_eval.evaluate_wider_pedestrian_for_upload(epoch_num, test_data, retinanet,retinanet_sk,threshold,new_map )
 
 		retinanet.train()
 

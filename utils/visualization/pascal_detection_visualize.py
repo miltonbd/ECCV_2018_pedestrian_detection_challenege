@@ -34,7 +34,8 @@ def show_original_512():
     draw_bbox_pascal(anno_path)
 
 def show_inria_person():
-    anno_path = '/media/milton/ssd1/research/competitions/data_wider_pedestrian/annotations_train/PennPed00001.xml'
+    # anno_path = '/media/milton/ssd1/research/competitions/data_wider_pedestrian/annotations_train/PennPed00001.xml'
+    anno_path='/media/milton/ssd1/dataset/pedestrian/tud_brussels/annotations/img-000-2.xml'
     draw_bbox_pascal(anno_path)
 
 show_inria_person()

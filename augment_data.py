@@ -206,7 +206,6 @@ def save_augs(JPEG_dir,anno_dir, idx_i,aug_img,aug_bb,imgid):
 def image_aug():
     train_dataset_aug=train_dataset
     train_dataset_aug.extend(train_dataset)
-    train_dataset_aug.extend(train_dataset)
     voc_dataset_aug = VocDataset(train_dataset_aug, 'Annotations')
     train_dataloader_resize = DataLoader(voc_dataset_aug, num_workers=4, batch_size=1, collate_fn=collate_aug)
     threads=[]
@@ -215,7 +214,7 @@ def image_aug():
         t = threading.Thread(target=augment, args=(data[0], data[1], batch_idx))
         threads.append(t)
         t.start()
-        time.sleep(.00001)
+        time.sleep(.01)
 
     for t in threads:
         t.join()
